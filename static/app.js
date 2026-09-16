@@ -81,7 +81,9 @@
           <button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">${mode === 'login' ? 'Sign in' : setup ? 'Create admin account' : 'Create account'}</button>
           <div class="err" id="err"></div>
         </form>
-        ${setup ? '' : `<div class="divider"></div><div class="small muted" style="text-align:center">${mode === 'login' ? (S.settings.allow_registration ? 'No account yet? <a href="#" id="sw">Create one</a>' : 'Need an account? Ask your administrator.') : 'Already have an account? <a href="#" id="sw">Sign in</a>'}</div>`}
+        ${setup ? '' : `<div class="divider"></div>${mode === 'login'
+          ? '<button type="button" class="btn" id="sw" style="width:100%;justify-content:center">Register a new account</button>'
+          : '<div class="small muted" style="text-align:center">Already have an account? <a href="#" id="sw">Sign in</a></div>'}`}
       </div></div>`;
       const sw = app.querySelector('#sw'); if (sw) sw.onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'register' : 'login'; draw(); };
       app.querySelector('#f').onsubmit = async (e) => {
