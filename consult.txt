@@ -73,8 +73,8 @@ OPTION A — Fly.io, always-available, ~US$2–4/month  (RECOMMENDED)
    5. `fly deploy`  → you get https://<name>.fly.dev
    6. Open it and create the first account (it becomes admin). Colleagues then click
       "Register a new account" on the sign-in page and pick their own ID and password.
-      Once everyone is in, you may turn self-registration off in Admin → Settings;
-      after that only admins add members. Invite people to boards from the Share dialog.
+      Registration is always open by design; access control happens at the board level,
+      where you invite people to private boards from the Share dialog.
    7. Backups: on your PC/Mac, once a week run
         curl -b "wb_session=<your cookie>" https://<name>.fly.dev/api/admin/export -o backup.json
       or simply log in as admin and click Admin → Settings → Full backup → Download.
@@ -122,8 +122,8 @@ cookies to be marked Secure (all three hosted options give you HTTPS for free).
 -----------------------------------
    [ ] Decide hosting option (A recommended) and deploy.
    [ ] Create the admin account first. Write the password in your password manager.
-   [ ] Admin → Settings: set Organization name. Leave self-registration ON while your
-       employees sign themselves up; switch it off once everyone has an account.
+   [ ] Admin → Settings: set Organization name.
+   [ ] Tell employees the URL; they register their own account from the sign-in page.
    [ ] Add members (Admin → Members → Add). Give each a temporary password; they change it
        under their profile.
    [ ] Make one "Team" board (Everyone in the team) as the shared space; use Private boards
@@ -135,6 +135,9 @@ cookies to be marked Secure (all three hosted options give you HTTPS for free).
 
 5. SECURITY NOTES FOR PUBLIC EXPOSURE
 -------------------------------------
+   - Anyone who can reach the URL can create an account (by design). Keep private boards
+     invite-only, and if the app is on the public internet consider putting it behind your
+     VPN/Tailscale or a simple front-door password so strangers cannot sign up.
    - Passwords are scrypt-hashed; sessions are random 256-bit tokens in HttpOnly cookies.
    - There is no e-mail, so there is NO self-service password reset. Admins reset passwords
      from the Members table. Keep two admins so you are never locked out.

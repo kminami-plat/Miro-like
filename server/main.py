@@ -151,7 +151,6 @@ def app_settings() -> dict[str, Any]:
     with db.conn() as c:
         n = c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
     return {
-        "allow_registration": db.get_setting("allow_registration", "1") == "1",
         "setup_needed": n == 0,
         "org_name": db.get_setting("org_name", "Team Whiteboard"),
     }
@@ -169,9 +168,7 @@ def register(body: RegisterIn, request: Request, response: Response):
     if not USERNAME_RE.match(body.username):
         raise HTTPException(400, "ID must be 2-32 chars: letters, numbers, . _ -")
     s = app_settings()
-    if not s["setup_needed"] and not s["allow_registration"]:
-        raise HTTPException(403, "Self-registration is disabled. Ask an admin to create your account.")
-    role = "admin" if s["setup_needed"] else "member"
+    role = "admin" if s["setup_needed"] else "member"  # anyone may sign themselves up
     user_id = uid()
     with db.conn() as c:
         if c.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (body.username,)).fetchone():
@@ -258,7 +255,6 @@ class AdminUserPatch(BaseModel):
 
 
 class SettingsIn(BaseModel):
-    allow_registration: Optional[bool] = None
     org_name: Optional[str] = Field(default=None, max_length=60)
 
 
@@ -339,8 +335,6 @@ def admin_settings(admin=Depends(auth.require_admin)):
 
 @app.patch("/api/admin/settings")
 def admin_patch_settings(body: SettingsIn, admin=Depends(auth.require_admin)):
-    if body.allow_registration is not None:
-        db.set_setting("allow_registration", "1" if body.allow_registration else "0")
     if body.org_name is not None and body.org_name.strip():
         db.set_setting("org_name", body.org_name.strip())
     return app_settings()

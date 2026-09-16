@@ -183,9 +183,12 @@ async def main():
         rows = await A.locator("#users tr[data-id]").count(); assert rows == 2, rows
         await A.click("#adduser"); await A.fill("#u", "y.sato"); await A.fill("#d", "Yuki Sato"); await A.click("#ok")
         await A.wait_for_function("() => document.querySelectorAll('#users tr[data-id]').length === 3")
-        await A.click(".tabs button[data-tab=settings]"); await A.click("#reg"); await A.wait_for_timeout(300)
-        r = await ctxG.request.post(f"{BASE}/api/auth/register", data={"username": "zzz", "password": "abcd1234"}); assert r.status == 403, r.status
-        print("Admin: add member OK, registration toggle enforced")
+        await A.click(".tabs button[data-tab=settings]"); await A.wait_for_selector("#org")
+        # Self-registration is always open: anyone can create their own account.
+        r = await ctxG.request.post(f"{BASE}/api/auth/register", data={"username": "zzz", "password": "abcd1234"}); assert r.status == 200, r.status
+        r = await ctxG.request.get(f"{BASE}/api/auth/me"); assert (await r.json())["user"]["role"] == "member"
+        assert "#reg" not in await A.content() and "Allow anyone to create" not in await A.inner_text("#tab-settings")
+        print("Admin: add member OK, self-registration always open (no disable switch)")
         await A.screenshot(path=f"{SHOT}/shot_admin.png")
         # export
         r = await ctxA.request.get(f"{BASE}/api/boards/{bid}/export"); ex = await r.json(); assert ex["format"] == "whiteboard/v1" and len(ex["items"]) >= 2

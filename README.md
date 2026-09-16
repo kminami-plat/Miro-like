@@ -10,7 +10,7 @@ Everything that Miro puts behind a paid plan is simply on:
 - **Advanced sharing**: team-wide boards (view or edit), revocable share links with view/edit
   permission and optional expiry, guest access without an account, ownership transfer.
 - **Member management**: ID + password accounts (no e-mail needed), admin panel to add / deactivate /
-  reset / promote members, and a switch to turn self-registration off.
+  reset / promote members. Anyone can also create their own account from the sign-in page.
 
 ## Features
 
@@ -28,7 +28,7 @@ Everything that Miro puts behind a paid plan is simply on:
 | Boards | Dashboard with search, starred boards, invitations inbox, duplicate, rename, export/import JSON, export PNG |
 | History | Automatic version every 10 min of activity (last 40 kept) + manual saved versions; download or restore any version, restore is broadcast live |
 | Backup | Admin full-backup JSON of every board; `scripts/backup_sqlite.py` for file-level copies; PostgreSQL option for managed hosting |
-| Admin | Members table (role, status, reset password, delete with board hand-over), all-boards view, org name, registration toggle |
+| Admin | Members table (role, status, reset password, delete with board hand-over), all-boards view, org name, full backup |
 
 ## Run it
 
@@ -41,8 +41,9 @@ it with `VENV_DIR=~/.venvs/whiteboard ./run.sh`; a synced venv makes Python impo
 ./run.sh 9000       # custom port
 ```
 
-The **first account created becomes the administrator**. After that, either leave
-self-registration on or turn it off in *Admin → Settings* and add members yourself.
+The **first account created becomes the administrator**. After that, colleagues click
+**Register a new account** on the sign-in page and choose their own ID and password. Admins can
+also add members directly under *Admin → Members*.
 
 Data lives in a single SQLite file at `data/boards.db` (override with `BOARD_DB=/path/to.db`).
 To use PostgreSQL instead (Neon, Supabase, Railway, RDS…) set `DATABASE_URL=postgres://…`; the

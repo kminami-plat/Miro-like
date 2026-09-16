@@ -351,9 +351,7 @@
       <div id="tab-settings" class="hidden"><div class="card" style="padding:18px;max-width:520px">
         <div class="row between" style="margin-bottom:14px"><div><b>Full backup</b><div class="small muted">Every board, member list and item as one JSON file.</div></div><a class="btn" href="/api/admin/export">Download</a></div><div class="divider"></div>
         <label class="field"><span>Organization name</span><div class="row"><input id="org"><button class="btn" id="saveorg">Save</button></div></label>
-        <div class="divider"></div>
-        <label class="switch" id="reg"><i></i><span>Allow anyone to create an account from the sign-in page</span></label>
-        <p class="small muted" style="margin-top:8px">When off, only admins can add members here.</p>
+        <p class="small muted">Anyone can create their own account from the sign-in page. You can also add members yourself under Members.</p>
       </div></div></div>`;
     wireTopbar();
     app.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => { app.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b)); ['users', 'boards', 'settings'].forEach((t) => app.querySelector('#tab-' + t).classList.toggle('hidden', t !== b.dataset.tab)); }));
@@ -385,8 +383,7 @@
     };
     const loadSettings = async () => {
       const s = await api('GET', '/api/admin/settings');
-      app.querySelector('#org').value = s.org_name; const reg = app.querySelector('#reg'); reg.classList.toggle('on', s.allow_registration);
-      reg.onclick = async () => { const on = !reg.classList.contains('on'); await api('PATCH', '/api/admin/settings', { allow_registration: on }); reg.classList.toggle('on', on); S.settings.allow_registration = on; toast(on ? 'Self-registration enabled' : 'Self-registration disabled'); };
+      app.querySelector('#org').value = s.org_name;
       app.querySelector('#saveorg').onclick = async () => { const d = await api('PATCH', '/api/admin/settings', { org_name: app.querySelector('#org').value }); S.settings = d; toast('Saved'); document.title = d.org_name; };
     };
     try { await Promise.all([loadUsers(), loadBoards(), loadSettings()]); } catch (e) { toast(e.message, true); }
