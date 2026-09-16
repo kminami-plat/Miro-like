@@ -112,6 +112,9 @@ uv pip install --python .venv/bin/python playwright   # once; uses your installe
 ./tests/run_e2e.sh
 ```
 
+If your editor reports `Failed to run python -m pip list`, the virtualenv was created without pip.
+Add it with `uv pip install --python .venv/bin/python pip`. It does not affect the tests.
+
 The suite registers an admin, builds a board with every item type, invites a second user, checks
 view-only enforcement and the live upgrade to editor, verifies realtime sync / cursors / presence,
 opens the board as a link guest, revokes the link, checks team boards, and exercises the admin panel.

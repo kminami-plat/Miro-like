@@ -6,3 +6,5 @@ data/*.db-*
 tests/screenshots/
 backups/
 .venv_old/
+consult.txt
+.env
