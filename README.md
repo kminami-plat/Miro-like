@@ -26,11 +26,15 @@ Everything that Miro puts behind a paid plan is simply on:
 | Realtime | WebSocket sync of every change, live cursors with names, remote selection outlines, presence avatars, permission changes pushed live |
 | Sharing | Private / team visibility, invitations with roles, share links (view/edit, guests on/off, expiry), transfer ownership, leave board |
 | Boards | Dashboard with search, starred boards, invitations inbox, duplicate, rename, export/import JSON, export PNG |
+| History | Automatic version every 10 min of activity (last 40 kept) + manual saved versions; download or restore any version, restore is broadcast live |
+| Backup | Admin full-backup JSON of every board; `scripts/backup_sqlite.py` for file-level copies; PostgreSQL option for managed hosting |
 | Admin | Members table (role, status, reset password, delete with board hand-over), all-boards view, org name, registration toggle |
 
 ## Run it
 
 Requirements: Python 3.11+ (no Node needed). `uv` is used if present, otherwise plain `venv`.
+If the project folder is synced by iCloud Drive (macOS Desktop often is), keep the virtualenv outside
+it with `VENV_DIR=~/.venvs/whiteboard ./run.sh`; a synced venv makes Python imports stall.
 
 ```bash
 ./run.sh            # http://localhost:8000
@@ -41,7 +45,27 @@ The **first account created becomes the administrator**. After that, either leav
 self-registration on or turn it off in *Admin → Settings* and add members yourself.
 
 Data lives in a single SQLite file at `data/boards.db` (override with `BOARD_DB=/path/to.db`).
-Back it up by copying the file.
+To use PostgreSQL instead (Neon, Supabase, Railway, RDS…) set `DATABASE_URL=postgres://…`; the
+schema is created automatically. Guest sessions and version history are stored in the same database,
+so nothing is lost on restart.
+
+### Backups
+
+- Admin → Settings → **Full backup** downloads every board, member list and item as one JSON file.
+- `.venv/bin/python scripts/backup_sqlite.py backups 14` makes a consistent copy of the SQLite file
+  (safe while running) and keeps the last 14. Put it in cron.
+- Per-board versions: board menu → **Version history**. Any version can be downloaded as JSON and
+  re-imported from the dashboard.
+
+### Hosting
+
+The app needs one long-running process (WebSockets), so serverless hosts such as Vercel are not a
+fit. Ready-made configs: `Dockerfile`, `fly.toml` (Fly.io with a persistent volume, a few dollars a
+month) and `render.yaml` (Render free tier + external Postgres). See `consult.txt` for a step-by-step
+comparison and the operations checklist.
+
+Environment variables: `PORT`, `BOARD_DB`, `DATABASE_URL`, `COOKIE_SECURE=1` (force Secure cookies),
+`AUTO_SNAPSHOT_MINUTES` (default 10), `MAX_AUTO_SNAPSHOTS` (default 40).
 
 ### Deploying on the office network
 
@@ -59,7 +83,9 @@ board.example.local {
 ```
 server/main.py   FastAPI app: REST API, WebSocket hub, static SPA
 server/auth.py   scrypt password hashing, sessions, guest sessions
-server/db.py     SQLite schema and helpers
+server/db.py     Schema + SQLite/PostgreSQL adapter
+scripts/         backup_sqlite.py
+Dockerfile, fly.toml, render.yaml   deployment
 static/app.js    SPA shell: auth, dashboard, share dialog, admin panel
 static/board.js  Canvas editor (tools, selection, undo, realtime)
 static/style.css

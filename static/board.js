@@ -948,6 +948,9 @@
         { label: 'Fit to content', k: 'Shift+1', action: fitToContent },
         { label: 'Select all', k: 'Ctrl+A', action: () => select([...state.items.keys()]) },
         '-',
+        { label: 'Save version now', action: () => opts.onSaveVersion && opts.onSaveVersion(), disabled: !canEdit() },
+        { label: 'Version history…', action: () => opts.onHistory && opts.onHistory() },
+        '-',
         { label: 'Export as JSON', action: () => { window.location.href = `/api/boards/${state.boardId}/export`; } },
         { label: 'Export as PNG', action: exportPng },
         { label: 'Duplicate board', action: () => opts.onDuplicate && opts.onDuplicate(), disabled: state.me.guest },
@@ -1026,6 +1029,14 @@
             break;
           }
           case 'op': if (m.conn !== state.myConn) applyOps(m.ops); break;
+          case 'items': { // full replace (version restore)
+            if (state.editing) stopEditing(false);
+            state.items.clear(); for (const it of m.items) state.items.set(it.id, it);
+            for (const id of [...state.selection]) if (!state.items.has(id)) state.selection.delete(id);
+            renderAll(); state.undo = []; state.redo = []; renderPropbar();
+            if (m.reason === 'restore') toast(`${m.by?.display_name || 'Someone'} restored an earlier version`);
+            break;
+          }
           case 'presence': {
             state.presence = m.users; renderPresence();
             const live = new Set(m.users.map((u) => u.conn));

@@ -22,10 +22,32 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,32}$")
 
 app = FastAPI(title="Whiteboard", docs_url=None, redoc_url=None)
 
+AUTO_SNAPSHOT_INTERVAL = int(os.environ.get("AUTO_SNAPSHOT_MINUTES", "10")) * 60
+MAX_AUTO_SNAPSHOTS = int(os.environ.get("MAX_AUTO_SNAPSHOTS", "40"))
+LOGIN_ATTEMPTS: dict[str, list[float]] = {}  # ip -> timestamps (basic brute-force throttle)
+
 
 @app.on_event("startup")
 def _startup() -> None:
     db.init_db()
+    print(f"[whiteboard] database: {db.backend_name()}")
+
+
+@app.get("/api/health")
+def health():
+    with db.conn() as c:
+        c.execute("SELECT 1").fetchone()
+    return {"ok": True, "db": "postgresql" if db.IS_PG else "sqlite"}
+
+
+def throttle_login(request: Request) -> None:
+    ip = request.client.host if request.client else "?"
+    t = time.time()
+    hits = [x for x in LOGIN_ATTEMPTS.get(ip, []) if t - x < 300]
+    if len(hits) >= 15:
+        raise HTTPException(429, "Too many attempts. Try again in a few minutes.")
+    hits.append(t)
+    LOGIN_ATTEMPTS[ip] = hits
 
 
 # ------------------------------------------------------------------ helpers
@@ -90,8 +112,9 @@ def actor_identity(user: dict | None, guest: dict | None) -> dict[str, Any]:
     return {"id": None, "display_name": "Anonymous", "color": "#999", "username": None, "guest": True}
 
 
-def set_cookie(resp: Response, name: str, value: str, max_age: int) -> None:
-    resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="lax", path="/")
+def set_cookie(request: Request, resp: Response, name: str, value: str, max_age: int) -> None:
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "") == "https" or os.environ.get("COOKIE_SECURE") == "1"
+    resp.set_cookie(name, value, max_age=max_age, httponly=True, samesite="lax", secure=secure, path="/")
 
 
 def board_summary(c, b: dict[str, Any], me: str | None = None) -> dict[str, Any]:
@@ -141,7 +164,8 @@ def me(request: Request):
 
 
 @app.post("/api/auth/register")
-def register(body: RegisterIn, response: Response):
+def register(body: RegisterIn, request: Request, response: Response):
+    throttle_login(request)
     if not USERNAME_RE.match(body.username):
         raise HTTPException(400, "ID must be 2-32 chars: letters, numbers, . _ -")
     s = app_settings()
@@ -150,7 +174,7 @@ def register(body: RegisterIn, response: Response):
     role = "admin" if s["setup_needed"] else "member"
     user_id = uid()
     with db.conn() as c:
-        if c.execute("SELECT 1 FROM users WHERE username=?", (body.username,)).fetchone():
+        if c.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (body.username,)).fetchone():
             raise HTTPException(409, "That ID is already taken")
         c.execute(
             "INSERT INTO users(id,username,display_name,password_hash,role,color,active,created_at) VALUES(?,?,?,?,?,?,1,?)",
@@ -159,20 +183,21 @@ def register(body: RegisterIn, response: Response):
         )
         u = dict(c.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone())
     token = auth.create_session(user_id)
-    set_cookie(response, auth.SESSION_COOKIE, token, auth.SESSION_TTL)
+    set_cookie(request, response, auth.SESSION_COOKIE, token, auth.SESSION_TTL)
     return {"user": auth.public_user(u)}
 
 
 @app.post("/api/auth/login")
-def login(body: LoginIn, response: Response):
+def login(body: LoginIn, request: Request, response: Response):
+    throttle_login(request)
     with db.conn() as c:
-        u = db.row_to_dict(c.execute("SELECT * FROM users WHERE username=?", (body.username.strip(),)).fetchone())
+        u = db.row_to_dict(c.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (body.username.strip(),)).fetchone())
     if not u or not auth.verify_password(body.password, u["password_hash"]):
         raise HTTPException(401, "Wrong ID or password")
     if not u["active"]:
         raise HTTPException(403, "This account has been deactivated")
     token = auth.create_session(u["id"])
-    set_cookie(response, auth.SESSION_COOKIE, token, auth.SESSION_TTL)
+    set_cookie(request, response, auth.SESSION_COOKIE, token, auth.SESSION_TTL)
     return {"user": auth.public_user(u)}
 
 
@@ -210,7 +235,7 @@ def update_me(body: ProfileIn, user=Depends(auth.require_user)):
 def search_users(q: str = "", user=Depends(auth.require_user)):
     with db.conn() as c:
         rows = c.execute(
-            "SELECT id,username,display_name,color FROM users WHERE active=1 AND (username LIKE ? OR display_name LIKE ?) ORDER BY username LIMIT 20",
+            "SELECT id,username,display_name,color FROM users WHERE active=1 AND (LOWER(username) LIKE LOWER(?) OR LOWER(display_name) LIKE LOWER(?)) ORDER BY username LIMIT 20",
             (f"%{q}%", f"%{q}%"),
         ).fetchall()
     return {"users": [dict(r) for r in rows]}
@@ -257,7 +282,7 @@ def admin_create_user(body: AdminUserIn, admin=Depends(auth.require_admin)):
         raise HTTPException(400, "Bad role")
     user_id = uid()
     with db.conn() as c:
-        if c.execute("SELECT 1 FROM users WHERE username=?", (body.username,)).fetchone():
+        if c.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (body.username,)).fetchone():
             raise HTTPException(409, "That ID is already taken")
         c.execute(
             "INSERT INTO users(id,username,display_name,password_hash,role,color,active,created_at) VALUES(?,?,?,?,?,?,1,?)",
@@ -412,7 +437,7 @@ async def patch_board(board_id: str, body: BoardPatch, request: Request):
 async def delete_board(board_id: str, request: Request):
     board, perm, user, guest = require_board(request, board_id, "owner")
     with db.conn() as c:
-        for tbl in ("items", "board_members", "share_links", "board_favorites"):
+        for tbl in ("items", "board_members", "share_links", "board_favorites", "board_snapshots"):
             c.execute(f"DELETE FROM {tbl} WHERE board_id=?", (board_id,))
         c.execute("DELETE FROM boards WHERE id=?", (board_id,))
     await HUB.broadcast(board_id, {"t": "deleted"})
@@ -528,7 +553,7 @@ async def invite_member(board_id: str, body: InviteIn, request: Request):
     if body.role not in ("editor", "viewer"):
         raise HTTPException(400, "Role must be editor or viewer")
     with db.conn() as c:
-        target = c.execute("SELECT * FROM users WHERE username=? AND active=1", (body.username.strip(),)).fetchone()
+        target = c.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?) AND active=1", (body.username.strip(),)).fetchone()
         if not target:
             raise HTTPException(404, "No user with that ID")
         if target["id"] == board["owner_id"]:
@@ -598,7 +623,8 @@ async def transfer_board(board_id: str, body: TransferIn, request: Request):
         c.execute("DELETE FROM board_members WHERE board_id=? AND user_id=?", (board_id, target["id"]))
         if old_owner != target["id"]:
             c.execute(
-                "INSERT OR REPLACE INTO board_members(board_id,user_id,role,status,invited_by,created_at) VALUES(?,?,?,?,?,?)",
+                "INSERT INTO board_members(board_id,user_id,role,status,invited_by,created_at) VALUES(?,?,?,?,?,?) "
+                "ON CONFLICT(board_id,user_id) DO UPDATE SET role='editor', status='active'",
                 (board_id, old_owner, "editor", "active", target["id"], db.now()),
             )
         board = get_board(c, board_id)
@@ -673,10 +699,7 @@ async def delete_link(board_id: str, token: str, request: Request):
     with db.conn() as c:
         c.execute("DELETE FROM share_links WHERE board_id=? AND token=?", (board_id, token))
         rows = c.execute("SELECT * FROM share_links WHERE board_id=? ORDER BY created_at", (board_id,)).fetchall()
-    # Guests admitted through this link lose access.
-    for g in auth.GUESTS.values():
-        if g.get("via", {}).get(board_id) == token:
-            g["boards"].pop(board_id, None)
+    auth.revoke_guest_access_via_link(board_id, token)  # guests admitted through this link lose access
     await HUB.refresh_permissions(board_id)
     return {"links": [link_row(r) for r in rows]}
 
@@ -724,13 +747,14 @@ def share_join(token: str, body: JoinIn, request: Request, response: Response):
             raise HTTPException(401, "Sign in to open this board")
         if not guest:
             gtoken, guest = auth.create_guest((body.guest_name or "Guest").strip())
-            set_cookie(response, auth.GUEST_COOKIE, gtoken, 60 * 60 * 24)
+            set_cookie(request, response, auth.GUEST_COOKIE, gtoken, auth.GUEST_TTL)
         elif body.guest_name:
             guest["display_name"] = body.guest_name.strip()[:40] or guest["display_name"]
         cur = guest["boards"].get(board["id"])
         if PERM_RANK[r["permission"]] >= PERM_RANK[cur]:
             guest["boards"][board["id"]] = r["permission"]
             guest.setdefault("via", {})[board["id"]] = token
+        auth.save_guest(guest)
         return {"board_id": board["id"]}
 
 
@@ -804,7 +828,10 @@ class Hub:
                 user = None
                 if client.user:
                     user = db.row_to_dict(c.execute("SELECT * FROM users WHERE id=?", (client.user["id"],)).fetchone())
-                perm = board_permission(c, board, user, client.guest)
+                guest = auth.get_guest(client.guest.get("token")) if client.guest else None
+                if client.guest and guest is None:
+                    guest = {**client.guest, "boards": {}}  # guest record expired or revoked
+                perm = board_permission(c, board, user, guest)
                 if perm is None:
                     await self.send(client, {"t": "kicked"})
                     try:
@@ -859,7 +886,129 @@ def apply_ops(board_id: str, ops: list[dict[str, Any]], actor_id: str | None) ->
                 out.append({"a": "create" if not existing else "update", "item": row})
         if out:
             c.execute("UPDATE boards SET updated_at=? WHERE id=?", (t, board_id))
+            maybe_auto_snapshot(c, board_id, actor_id, t)
     return out
+
+
+# ------------------------------------------------------------------ version history (snapshots)
+
+def board_items(c, board_id: str) -> list[dict[str, Any]]:
+    return [db.item_row(r) for r in c.execute("SELECT * FROM items WHERE board_id=? ORDER BY z, created_at", (board_id,))]
+
+
+def write_snapshot(c, board_id: str, kind: str, label: str, actor_id: str | None, t: float | None = None) -> dict[str, Any]:
+    items = board_items(c, board_id)
+    sid = uid()
+    t = t or db.now()
+    c.execute(
+        "INSERT INTO board_snapshots(id,board_id,kind,label,created_by,created_at,item_count,data) VALUES(?,?,?,?,?,?,?,?)",
+        (sid, board_id, kind, label[:80], actor_id, t, len(items), json.dumps(items)),
+    )
+    if kind == "auto":
+        old = c.execute(
+            "SELECT id FROM board_snapshots WHERE board_id=? AND kind='auto' ORDER BY created_at DESC LIMIT 1000 OFFSET ?",
+            (board_id, MAX_AUTO_SNAPSHOTS),
+        ).fetchall()
+        for r in old:
+            c.execute("DELETE FROM board_snapshots WHERE id=?", (r["id"],))
+    return {"id": sid, "board_id": board_id, "kind": kind, "label": label, "created_by": actor_id, "created_at": t, "item_count": len(items)}
+
+
+def maybe_auto_snapshot(c, board_id: str, actor_id: str | None, t: float) -> None:
+    """Keep a rolling history: one automatic version per AUTO_SNAPSHOT_INTERVAL of activity."""
+    last = c.execute("SELECT created_at FROM board_snapshots WHERE board_id=? ORDER BY created_at DESC LIMIT 1", (board_id,)).fetchone()
+    if last is None or t - last["created_at"] >= AUTO_SNAPSHOT_INTERVAL:
+        write_snapshot(c, board_id, "auto", "", actor_id, t)
+
+
+def snapshot_meta(c, board_id: str) -> list[dict[str, Any]]:
+    rows = c.execute(
+        "SELECT s.id, s.kind, s.label, s.created_at, s.item_count, s.created_by, u.display_name AS author "
+        "FROM board_snapshots s LEFT JOIN users u ON u.id=s.created_by WHERE s.board_id=? ORDER BY s.created_at DESC LIMIT 200",
+        (board_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+class SnapshotIn(BaseModel):
+    label: str = Field(default="", max_length=80)
+
+
+@app.get("/api/boards/{board_id}/snapshots")
+def list_snapshots(board_id: str, request: Request):
+    board, perm, user, guest = require_board(request, board_id, "view")
+    with db.conn() as c:
+        return {"snapshots": snapshot_meta(c, board_id)}
+
+
+@app.post("/api/boards/{board_id}/snapshots")
+def create_snapshot(board_id: str, body: SnapshotIn, request: Request):
+    board, perm, user, guest = require_board(request, board_id, "edit")
+    with db.conn() as c:
+        write_snapshot(c, board_id, "manual", body.label or "Saved version", (user or guest or {}).get("id"))
+        return {"snapshots": snapshot_meta(c, board_id)}
+
+
+@app.get("/api/boards/{board_id}/snapshots/{snap_id}")
+def read_snapshot(board_id: str, snap_id: str, request: Request):
+    board, perm, user, guest = require_board(request, board_id, "view")
+    with db.conn() as c:
+        r = c.execute("SELECT * FROM board_snapshots WHERE id=? AND board_id=?", (snap_id, board_id)).fetchone()
+    if not r:
+        raise HTTPException(404, "Version not found")
+    d = dict(r)
+    d["items"] = json.loads(d.pop("data"))
+    return {"snapshot": d}
+
+
+@app.post("/api/boards/{board_id}/snapshots/{snap_id}/restore")
+async def restore_snapshot(board_id: str, snap_id: str, request: Request):
+    board, perm, user, guest = require_board(request, board_id, "edit")
+    actor_id = (user or guest or {}).get("id")
+    with db.conn() as c:
+        r = c.execute("SELECT * FROM board_snapshots WHERE id=? AND board_id=?", (snap_id, board_id)).fetchone()
+        if not r:
+            raise HTTPException(404, "Version not found")
+        # Safety net: keep the current state as a version before overwriting it.
+        write_snapshot(c, board_id, "manual", "Before restore", actor_id)
+        items = json.loads(r["data"])
+        t = db.now()
+        c.execute("DELETE FROM items WHERE board_id=?", (board_id,))
+        for it in items:
+            c.execute(
+                "INSERT INTO items(id,board_id,type,x,y,w,h,rotation,z,props,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (it["id"], board_id, it["type"], it["x"], it["y"], it["w"], it["h"], it.get("rotation", 0), it.get("z", 0),
+                 json.dumps(it.get("props", {})), it.get("created_by"), actor_id, it.get("created_at", t), t),
+            )
+        c.execute("UPDATE boards SET updated_at=? WHERE id=?", (t, board_id))
+        items = board_items(c, board_id)
+        snaps = snapshot_meta(c, board_id)
+    await HUB.broadcast(board_id, {"t": "items", "items": items, "reason": "restore", "by": actor_identity(user, guest)})
+    return {"items": items, "snapshots": snaps}
+
+
+@app.delete("/api/boards/{board_id}/snapshots/{snap_id}")
+def delete_snapshot(board_id: str, snap_id: str, request: Request):
+    board, perm, user, guest = require_board(request, board_id, "owner")
+    with db.conn() as c:
+        c.execute("DELETE FROM board_snapshots WHERE id=? AND board_id=?", (snap_id, board_id))
+        return {"snapshots": snapshot_meta(c, board_id)}
+
+
+@app.get("/api/admin/export")
+def admin_export(admin=Depends(auth.require_admin)):
+    """Full backup of every board (metadata, members, items) as one JSON file."""
+    with db.conn() as c:
+        boards = []
+        for b in c.execute("SELECT * FROM boards ORDER BY created_at").fetchall():
+            b = dict(b)
+            b["members"] = list_members_rows(c, b)
+            b["items"] = board_items(c, b["id"])
+            boards.append(b)
+        users = [auth.public_user(dict(r)) for r in c.execute("SELECT * FROM users").fetchall()]
+    payload = {"format": "whiteboard/backup-v1", "exported_at": db.now(), "users": users, "boards": boards}
+    fname = time.strftime("whiteboard-backup-%Y%m%d-%H%M.json")
+    return JSONResponse(payload, headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @app.websocket("/ws/boards/{board_id}")
@@ -896,7 +1045,7 @@ async def board_ws(ws: WebSocket, board_id: str):
                 if PERM_RANK[client.perm] < PERM_RANK["edit"]:
                     await HUB.send(client, {"t": "error", "message": "You have view-only access"})
                     continue
-                ops = apply_ops(board_id, msg.get("ops", []), actor_id)
+                ops = await asyncio.to_thread(apply_ops, board_id, msg.get("ops", []), actor_id)
                 if ops:
                     await HUB.broadcast(board_id, {"t": "op", "ops": ops, "by": client.ident, "conn": conn_id, "echo": msg.get("echo")}, exclude=None)
             elif t == "cursor":

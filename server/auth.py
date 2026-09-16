@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import hmac
 import secrets
 import time
@@ -16,8 +17,7 @@ SESSION_COOKIE = "wb_session"
 SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
 GUEST_COOKIE = "wb_guest"
 
-# In-memory guest sessions (link visitors without an account). token -> {name, color, boards:{board_id: permission}}
-GUESTS: dict[str, dict[str, Any]] = {}
+GUEST_TTL = 60 * 60 * 24 * 7  # link guests keep their access for a week (persisted in DB)
 
 AVATAR_COLORS = [
     "#F24E1E", "#FF7262", "#A259FF", "#1ABCFE", "#0ACF83", "#FFB800",
@@ -118,16 +118,46 @@ def ws_user(ws: WebSocket) -> dict[str, Any] | None:
     return user_from_token(ws.cookies.get(SESSION_COOKIE))
 
 
-# ---- guests -----------------------------------------------------------------
+# ---- guests (link visitors without an account; stored in DB so restarts keep them) ----
+
+def _guest_row(r) -> dict[str, Any]:
+    d = dict(r)
+    return {"token": d["token"], "id": d["id"], "display_name": d["display_name"], "color": d["color"],
+            "boards": json.loads(d["boards"] or "{}"), "via": json.loads(d["via"] or "{}"), "guest": True}
+
 
 def get_guest(token: str | None) -> dict[str, Any] | None:
     if not token:
         return None
-    return GUESTS.get(token)
+    with db.conn() as c:
+        r = c.execute("SELECT * FROM guests WHERE token=? AND expires_at>?", (token, time.time())).fetchone()
+    return _guest_row(r) if r else None
 
 
 def create_guest(name: str) -> tuple[str, dict[str, Any]]:
     token = secrets.token_urlsafe(24)
-    g = {"id": "guest_" + token[:10], "display_name": name[:40] or "Guest", "color": pick_color(token), "boards": {}, "guest": True}
-    GUESTS[token] = g
-    return token, g
+    t = time.time()
+    with db.conn() as c:
+        c.execute(
+            "INSERT INTO guests(token,id,display_name,color,boards,via,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)",
+            (token, "guest_" + token[:10], name[:40] or "Guest", pick_color(token), "{}", "{}", t, t + GUEST_TTL),
+        )
+        c.execute("DELETE FROM guests WHERE expires_at < ?", (t,))
+    return token, get_guest(token)  # type: ignore[return-value]
+
+
+def save_guest(g: dict[str, Any]) -> None:
+    with db.conn() as c:
+        c.execute("UPDATE guests SET display_name=?, boards=?, via=? WHERE token=?",
+                  (g["display_name"], json.dumps(g["boards"]), json.dumps(g.get("via", {})), g["token"]))
+
+
+def revoke_guest_access_via_link(board_id: str, link_token: str) -> None:
+    with db.conn() as c:
+        rows = c.execute("SELECT * FROM guests WHERE via LIKE ?", (f'%"{link_token}"%',)).fetchall()
+        for r in rows:
+            g = _guest_row(r)
+            if g["via"].get(board_id) == link_token:
+                g["boards"].pop(board_id, None)
+                g["via"].pop(board_id, None)
+                c.execute("UPDATE guests SET boards=?, via=? WHERE token=?", (json.dumps(g["boards"]), json.dumps(g["via"]), g["token"]))

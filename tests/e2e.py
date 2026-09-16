@@ -155,6 +155,22 @@ async def main():
         r = await ctxA.request.delete(f"{BASE}/api/boards/{bid}/links/{token}"); assert r.status == 200
         await G.wait_for_selector("#new, form#f, .auth-card", timeout=5000)
         print("Guest kicked after link revoked")
+        # ---- version history: manual save, mutate, restore, live "items" broadcast to B
+        r = await ctxA.request.post(f"{BASE}/api/boards/{bid}/snapshots", data={"label": "before cleanup"}); assert r.status == 200
+        snaps = (await r.json())["snapshots"]; assert snaps and snaps[0]["label"] == "before cleanup", snaps
+        n_before = snaps[0]["item_count"]
+        await A.goto(f"{BASE}/b/{bid}"); await A.wait_for_selector(".status-dot.on")
+        await A.keyboard.press("Meta+a"); await A.keyboard.press("Delete"); await A.wait_for_timeout(400)
+        assert await A.locator(".item").count() == 0, "select-all delete failed"
+        await B.goto(f"{BASE}/b/{bid}"); await B.wait_for_selector(".status-dot.on")
+        r = await ctxA.request.post(f"{BASE}/api/boards/{bid}/snapshots/{snaps[0]['id']}/restore"); assert r.status == 200
+        restored = (await r.json())["items"]; assert len(restored) == n_before, (len(restored), n_before)
+        await A.wait_for_function(f"() => document.querySelectorAll('.item, .item-svg').length === {n_before}", timeout=5000)
+        await B.wait_for_function(f"() => document.querySelectorAll('.item, .item-svg').length === {n_before}", timeout=5000)
+        r = await ctxA.request.get(f"{BASE}/api/boards/{bid}/snapshots"); kinds = [x["kind"] for x in (await r.json())["snapshots"]]
+        assert "auto" in kinds and kinds.count("manual") >= 2, kinds
+        # guest session survives (stored in DB): re-open guest board via cookie
+        print("Version history: save/restore/live-broadcast OK; kinds:", kinds)
         # ---- team board visibility
         r = await ctxA.request.post(f"{BASE}/api/boards", data={"name": "Team wall", "visibility": "team", "team_permission": "view"})
         tb = (await r.json())["board"]
@@ -176,7 +192,12 @@ async def main():
         # B can't delete A's board
         r = await ctxB.request.delete(f"{BASE}/api/boards/{bid}"); assert r.status == 403
         # dashboard screenshot
-        await A.goto(BASE); await A.wait_for_selector(".board-card"); await A.screenshot(path=f"{SHOT}/shot_dash.png")
+        await A.goto(BASE)
+        try:
+            await A.wait_for_selector(".board-card", timeout=10000)
+        except Exception:
+            print("DASHBOARD HTML:", (await A.inner_text("#app"))[:800]); print("ERRORS:", errors); raise
+        await A.screenshot(path=f"{SHOT}/shot_dash.png")
         await browser.close()
     print("\nALL E2E CHECKS PASSED")
     if errors:

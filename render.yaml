@@ -1,0 +1,13 @@
+# Render.com blueprint. Free web service + external Postgres (e.g. Neon free tier) = $0/month.
+# Free instances sleep after 15 min idle and take ~30-60 s to wake; upgrade to Starter ($7/mo) to avoid that.
+services:
+  - type: web
+    name: team-whiteboard
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false        # paste your Postgres connection string in the Render dashboard
+      - key: COOKIE_SECURE
+        value: "1"

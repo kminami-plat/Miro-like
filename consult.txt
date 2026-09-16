@@ -1,0 +1,151 @@
+TEAM WHITEBOARD — CONSULTATION & YOUR TO-DO LIST
+=================================================
+Written 2026-09-16 for Kaito (Plat Yonezawa). Audience: the person who will own hosting and
+day-to-day admin of the whiteboard. Budget: tight. Users: ~10 normally, 30 max.
+
+
+1. SHORT ANSWERS TO YOUR QUESTIONS
+----------------------------------
+
+Q: Can it be "modern" with Node.js / Next.js?
+A: It can, but I recommend NOT rewriting it now. Reasons:
+   - The app is already modern where it matters (realtime WebSockets, SPA, no page reloads,
+     no build step, ~2,500 lines total). "Modern" for users means fast and reliable, not the
+     language on the server.
+   - Next.js is optimised for content sites and serverless functions. A whiteboard is the
+     opposite: one long-running process holding open WebSocket connections. On Vercel you
+     CANNOT keep a WebSocket open, so you would have to add a paid/third-party realtime
+     service (Liveblocks, Pusher, Ably, PartyKit...) plus a hosted database. That is 3 bills
+     and 3 dashboards instead of 1, and a full rewrite (roughly 1–2 weeks of work).
+   - Python + FastAPI + one SQLite/Postgres database runs on the cheapest tier of any
+     container host and is trivial to back up.
+   If you later want a Node stack for team-skill reasons, the REST/WebSocket API here is small
+   and documented in README; a Node or Next.js frontend could talk to it unchanged.
+
+Q: Vercel?
+A: No, for the reason above (no persistent WebSocket / no disk). Use a host that runs a
+   container 24/7 or wakes it on demand. See section 3.
+
+Q: PostgreSQL?
+A: Supported now — set DATABASE_URL and it switches automatically (SQLite stays the default).
+   For 30 users SQLite on a persistent disk is completely sufficient and simpler. Use Postgres
+   ONLY if your host has no persistent disk (Render free tier) or you want a managed DB with
+   point-in-time recovery. Neon and Supabase both have free Postgres tiers that fit this app.
+   NOTE: I could not run a real Postgres here (no Docker daemon / no local PG). The SQL is
+   standard and the adapter is in place, but please do step 3B-4 (run the test suite against
+   your Postgres) before trusting it in production.
+
+Q: "I don't like the board reset."
+A: Boards were never reset — they have always been saved in the SQLite file. What was lost on
+   restart before was only *guest link sessions* (visitors without an account). That is fixed:
+   guests are now stored in the database too (they keep access for 7 days).
+   On top of that you now have:
+   - Version history per board: an automatic version every 10 minutes of activity (keeps the
+     last 40) + manual "Save version now" with a label. Any version can be downloaded or
+     restored; restoring first saves the current state, so nothing is ever destroyed.
+   - Board export/import (JSON) and PNG export.
+   - Admin → Settings → "Full backup": every board, member and item in one JSON file.
+   - scripts/backup_sqlite.py for scheduled file-level backups.
+   What still needs YOU: choosing where the database lives and scheduling backups (section 3).
+
+
+2. WHAT I IMPLEMENTED IN THIS ROUND
+-----------------------------------
+   [x] Version history (auto + manual snapshots, restore, download, live broadcast to everyone)
+   [x] Guest sessions persisted in DB (survive restarts, 7-day TTL, revoked with the link)
+   [x] PostgreSQL backend via DATABASE_URL (SQLite remains default) — untested against real PG
+   [x] Full-backup endpoint for admins + SQLite backup script
+   [x] Dockerfile, fly.toml (Fly.io), render.yaml (Render) ready to deploy
+   [x] Production hardening: Secure cookies under HTTPS, proxy header support, login
+       throttling (15 attempts / 5 min / IP), case-insensitive unique user IDs, /api/health
+   [x] Database writes moved off the WebSocket event loop (matters with a remote Postgres)
+
+
+3. YOUR TO-DO: GETTING IT ONLINE FOR EMPLOYEES
+----------------------------------------------
+Pick ONE of these. My recommendation for your size and budget is option A.
+
+OPTION A — Fly.io, always-available, ~US$2–4/month  (RECOMMENDED)
+   1. Create an account at fly.io, install flyctl, `fly auth login`.
+   2. In the repo: edit `app = "team-whiteboard"` in fly.toml to a unique name.
+   3. `fly launch --copy-config --no-deploy` (region nrt = Tokyo).
+   4. `fly volumes create wb_data --size 1 --region nrt`
+   5. `fly deploy`  → you get https://<name>.fly.dev
+   6. Open it, create the first account (becomes admin), then Admin → Settings: turn OFF
+      self-registration and add your colleagues yourself (ID + temporary password).
+   7. Backups: on your PC/Mac, once a week run
+        curl -b "wb_session=<your cookie>" https://<name>.fly.dev/api/admin/export -o backup.json
+      or simply log in as admin and click Admin → Settings → Full backup → Download.
+      (Fly volumes also take daily snapshots kept 5 days; `fly volumes snapshots list`.)
+   Cost: shared-cpu-1x 256 MB ≈ $2/mo + 1 GB volume ≈ $0.15/mo. With auto-stop it is less.
+
+OPTION B — $0/month: Render free web service + Neon free Postgres
+   1. Create a Postgres project at neon.tech (free tier) and copy the connection string
+      (postgres://...?sslmode=require).
+   2. Push this repo to GitHub (private repo is fine).
+   3. On render.com: New → Blueprint → select the repo (render.yaml is picked up).
+      Paste the Neon string into the DATABASE_URL env var when asked.
+   4. BEFORE inviting people: run the test suite against the Neon database once —
+        DATABASE_URL="postgres://..." BASE_URL=http://127.0.0.1:8765 ./tests/run_e2e.sh
+      (edit tests/run_e2e.sh to not set BOARD_DB, or export DATABASE_URL first).
+      If anything fails, send me the log.
+   5. First visit takes 30–60 s after 15 min of inactivity (free tier sleeps). If that annoys
+      people, Render Starter is $7/mo; then you may as well use option A.
+   Backups: Neon keeps 24 h point-in-time history on the free plan; still download the Full
+   backup JSON monthly.
+
+OPTION C — Cheap VPS you control (Hetzner CX22 ≈ €3.8/mo, or any Ubuntu box)
+   1. Install Docker, `docker build -t whiteboard .`
+   2. `docker run -d --restart=always -p 127.0.0.1:8000:8000 -v /srv/wb:/data whiteboard`
+   3. Put Caddy in front for automatic HTTPS (see README, 3 lines of config) and point a
+      DNS name at the server.
+   4. Cron: `0 3 * * * docker exec <container> python scripts/backup_sqlite.py /data/backups 14`
+      and copy /srv/wb/backups somewhere off-server weekly.
+
+OPTION D — Office PC/NAS on the LAN only (no internet access from outside)
+   `./run.sh` + a fixed local IP is enough; use Tailscale (free for small teams) if people
+   need to reach it from home. No public exposure = least security worry.
+
+In all options you need a domain or the host's default subdomain; HTTPS is required for
+cookies to be marked Secure (all three hosted options give you HTTPS for free).
+
+
+3b. LOCAL DEVELOPMENT NOTE
+   Your Desktop folder appears to be cloud-synced: Python imports from `.venv` stalled for
+   minutes mid-session. I moved the venv to ~/.venvs/whiteboard and left `.venv` as a symlink.
+   If you clone the repo elsewhere, use `VENV_DIR=~/.venvs/whiteboard ./run.sh`. Consider
+   keeping code projects outside Desktop/Documents or excluding them from iCloud sync.
+
+4. OPERATIONAL CHECKLIST (ONE-TIME)
+-----------------------------------
+   [ ] Decide hosting option (A recommended) and deploy.
+   [ ] Create the admin account first. Write the password in your password manager.
+   [ ] Admin → Settings: set Organization name; turn OFF self-registration.
+   [ ] Add members (Admin → Members → Add). Give each a temporary password; they change it
+       under their profile.
+   [ ] Make one "Team" board (Everyone in the team) as the shared space; use Private boards
+       + invitations for project-specific work.
+   [ ] Test from a phone/tablet once; the canvas supports touch pan/pinch.
+   [ ] Schedule backups (see the option you chose). Test a restore once by importing a
+       backup JSON into a new board (Dashboard → Import JSON).
+
+
+5. SECURITY NOTES FOR PUBLIC EXPOSURE
+-------------------------------------
+   - Passwords are scrypt-hashed; sessions are random 256-bit tokens in HttpOnly cookies.
+   - There is no e-mail, so there is NO self-service password reset. Admins reset passwords
+     from the Members table. Keep two admins so you are never locked out.
+   - Login is rate-limited per IP; still encourage passwords of 10+ characters.
+   - Share links grant access to anyone who has the URL. Prefer "sign-in required" links for
+     sensitive boards, set an expiry, and revoke links after workshops.
+   - Admins can open every board, including private ones (intended for a company tool).
+
+
+6. NICE-TO-HAVE LATER (NOT NEEDED FOR LAUNCH)
+---------------------------------------------
+   - Image/file upload onto boards (needs object storage; Cloudflare R2 has a free tier).
+   - Comments / emoji reactions on notes.
+   - Board templates (retrospective, kanban, SWOT...). Cheap: export a board as JSON and
+     import it — that already works as a template mechanism.
+   - Rotation handles for items (data model already stores rotation).
+   - Japanese UI strings (currently English; all text lives in static/app.js and board.js).

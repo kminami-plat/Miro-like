@@ -296,11 +296,26 @@
       onDuplicate: async () => { try { const d = await api('POST', `/api/boards/${boardId}/duplicate`); toast('Board duplicated'); nav('/b/' + d.board.id); } catch (e) { toast(e.message, true); } },
       onDelete: async () => { if (await confirmDialog('Delete board?', 'Everything on this board will be permanently deleted.')) { try { await api('DELETE', `/api/boards/${boardId}`); nav('/'); } catch (e) { toast(e.message, true); } } },
       onShortcuts: shortcutsModal,
+      onSaveVersion: async () => { const label = await promptDialog('Save version', 'Label (optional)', '', 'Save'); if (label === null) return; try { await api('POST', `/api/boards/${boardId}/snapshots`, { label }); toast('Version saved'); } catch (e) { toast(e.message, true); } },
+      onHistory: () => historyModal(boardId, data.permission),
       onKicked: () => { toast('You no longer have access to this board', true); nav('/'); },
       onDeleted: () => { toast('This board was deleted', true); nav('/'); },
       onBoardUpdate: (b) => { data.board = b; },
     });
     S.editor = ed;
+  }
+  async function historyModal(boardId, perm) {
+    const canEdit = perm === 'edit' || perm === 'owner';
+    const { el, close } = modal(`<h2>Version history</h2><p class="small muted">A version is saved automatically every few minutes while people work, plus whenever someone saves one manually. Restoring keeps the current state as a version too, so nothing is lost.</p><div id="list"><p class="muted">Loading…</p></div><div class="actions">${canEdit ? '<button class="btn" id="save">Save current version</button>' : ''}<button class="btn primary" data-close>Close</button></div>`, { wide: true });
+    const draw = async () => {
+      let snaps; try { snaps = (await api('GET', `/api/boards/${boardId}/snapshots`)).snapshots; } catch (e) { toast(e.message, true); return; }
+      el.querySelector('#list').innerHTML = snaps.length ? `<table class="tbl"><tr><th>When</th><th>Type</th><th>By</th><th>Items</th><th></th></tr>${snaps.map((s) => `<tr><td>${new Date(s.created_at * 1000).toLocaleString()}<div class="small muted">${timeAgo(s.created_at)}</div></td><td>${s.kind === 'manual' ? `<span class="pill">${esc(s.label || 'Saved')}</span>` : '<span class="pill gray">auto</span>'}</td><td>${esc(s.author || (s.created_by && s.created_by.startsWith('guest_') ? 'Guest' : '—'))}</td><td>${s.item_count}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" data-dl="${s.id}">Download</button>${canEdit ? `<button class="btn sm primary" data-restore="${s.id}">Restore</button>` : ''}${perm === 'owner' ? `<button class="btn ghost sm danger" data-del="${s.id}" title="Delete version">✕</button>` : ''}</td></tr>`).join('')}</table>` : '<div class="empty">No versions yet. They appear as soon as the board is edited.</div>';
+      el.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = async () => { const d = await api('GET', `/api/boards/${boardId}/snapshots/${b.dataset.dl}`); const blob = new Blob([JSON.stringify({ format: 'whiteboard/v1', name: `version-${b.dataset.dl}`, items: d.snapshot.items }, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `board-version-${new Date(d.snapshot.created_at * 1000).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`; a.click(); }));
+      el.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = async () => { if (await confirmDialog('Restore this version?', 'The board will be replaced with this version for everyone. The current state is saved as a version first.', 'Restore')) { try { await api('POST', `/api/boards/${boardId}/snapshots/${b.dataset.restore}/restore`); toast('Version restored'); close(); } catch (e) { toast(e.message, true); } } }));
+      el.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => { await api('DELETE', `/api/boards/${boardId}/snapshots/${b.dataset.del}`); draw(); }));
+    };
+    const sv = el.querySelector('#save'); if (sv) sv.onclick = async () => { const label = await promptDialog('Save version', 'Label (optional)', '', 'Save'); if (label === null) return; await api('POST', `/api/boards/${boardId}/snapshots`, { label }); draw(); };
+    draw();
   }
   function shortcutsModal() {
     const rows = [['V', 'Select'], ['H', 'Pan (or hold Space / middle mouse)'], ['N', 'Sticky note'], ['T', 'Text'], ['S', 'Shape'], ['F', 'Frame'], ['L / A', 'Line / Arrow'], ['P', 'Pen'], ['Double-click canvas', 'New sticky note'], ['Double-click item', 'Edit text'], ['Enter', 'Edit selected'], ['Esc', 'Finish editing / deselect'], ['Del', 'Delete'], ['Ctrl+Z / Shift+Ctrl+Z', 'Undo / Redo'], ['Ctrl+C / V / D', 'Copy / Paste / Duplicate'], ['Ctrl+A', 'Select all'], ['[ / ]', 'Send back / bring front'], ['Arrows', 'Nudge (Shift = 10px)'], ['Scroll', 'Pan'], ['Ctrl+Scroll / pinch', 'Zoom'], ['Ctrl+0', 'Reset zoom'], ['Shift+1', 'Fit to content'], ['Shift+drag corner', 'Free resize (stickies keep ratio)']];
@@ -332,6 +347,7 @@
       <div id="tab-users"><div class="row between" style="margin-bottom:12px"><span class="muted small" id="ucount"></span><button class="btn primary" id="adduser">+ Add member</button></div><div class="card" id="users"></div></div>
       <div id="tab-boards" class="hidden"><div class="card" id="boards"></div></div>
       <div id="tab-settings" class="hidden"><div class="card" style="padding:18px;max-width:520px">
+        <div class="row between" style="margin-bottom:14px"><div><b>Full backup</b><div class="small muted">Every board, member list and item as one JSON file.</div></div><a class="btn" href="/api/admin/export">Download</a></div><div class="divider"></div>
         <label class="field"><span>Organization name</span><div class="row"><input id="org"><button class="btn" id="saveorg">Save</button></div></label>
         <div class="divider"></div>
         <label class="switch" id="reg"><i></i><span>Allow anyone to create an account from the sign-in page</span></label>

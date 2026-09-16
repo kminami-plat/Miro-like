@@ -1,0 +1,27 @@
+# Fly.io: always-on small VM with a persistent volume for the SQLite file (~$2-4/month).
+#   fly launch --copy-config --no-deploy   (pick a region near Yonezawa, e.g. nrt)
+#   fly volumes create wb_data --size 1 --region nrt
+#   fly deploy
+app = "team-whiteboard"          # change to a unique name
+primary_region = "nrt"
+
+[build]
+
+[env]
+  BOARD_DB = "/data/boards.db"
+  PORT = "8000"
+
+[[mounts]]
+  source = "wb_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"    # stops when idle; wakes on first request (saves money)
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
