@@ -1,78 +1,102 @@
-# Team Whiteboard
+# チームホワイトボード
 
-A self-hosted, Miro-style collaborative whiteboard for internal teams. Multiple people open the
-same board and see each other's sticky notes, drawings, cursors and selections live.
+社内チーム向けのセルフホスト型・Miro 風コラボレーションホワイトボードです。複数人が同じボードを開き、
+付箋・図形・手書き・カーソル・選択範囲をリアルタイムで共有できます。
 
-Everything that Miro puts behind a paid plan is simply on:
+Miro では有料プランになる機能が、そのまま使えます:
 
-- **Unlimited boards** for every member.
-- **Private boards with invitations** (invite by user ID as editor or viewer; invitees accept or decline).
-- **Advanced sharing**: team-wide boards (view or edit), revocable share links with view/edit
-  permission and optional expiry, guest access without an account, ownership transfer.
-- **Member management**: ID + password accounts (no e-mail needed), admin panel to add / deactivate /
-  reset / promote members. Anyone can also create their own account from the sign-in page.
+- **ボード数無制限**（全メンバー）
+- **招待制のプライベートボード**（ユーザーIDで編集者/閲覧者として招待、招待された側が参加/辞退）
+- **柔軟な共有**: チーム全員に公開（閲覧/編集）、権限・有効期限付きの共有リンク、アカウント不要のゲスト参加、所有権の譲渡
+- **メンバー管理**: ID + パスワードのアカウント（メールアドレス不要）、管理画面からの追加・無効化・パスワード再設定・管理者昇格。
+  サインイン画面から各自でアカウントを作成することも可能（招待コードで制限可）
 
-## Features
+## 機能
 
-| Area | What you get |
+| 領域 | 内容 |
 | --- | --- |
-| Canvas | Infinite board, pan (scroll, Space+drag, hand tool), zoom (Ctrl+scroll, pinch, buttons), fit to content, dot grid |
-| Sticky notes | 11 colours, auto-fitting or fixed text size, bold, author label, keep-ratio resize |
-| Text | Free text boxes with size, colour, bold, alignment; grow with content |
-| Shapes | Rectangle, rounded, ellipse, diamond, triangle with fill, border and label |
-| Frames | Titled regions to group/categorise notes; moving a frame moves its contents |
-| Lines | Straight lines, arrows (one or both ends), dashed, three widths; freehand pen |
-| Editing | Multi-select, rubber-band, resize handles, lock, z-order, duplicate, copy/paste, nudge, undo/redo, context menu |
-| Realtime | WebSocket sync of every change, live cursors with names, remote selection outlines, presence avatars, permission changes pushed live |
-| Sharing | Private / team visibility, invitations with roles, share links (view/edit, guests on/off, expiry), transfer ownership, leave board |
-| Boards | Dashboard with search, starred boards, invitations inbox, duplicate, rename, export/import JSON, export PNG |
-| History | Automatic version every 10 min of activity (last 40 kept) + manual saved versions; download or restore any version, restore is broadcast live |
-| Backup | Admin full-backup JSON of every board; `scripts/backup_sqlite.py` for file-level copies; PostgreSQL option for managed hosting |
-| Admin | Members table (role, status, reset password, delete with board hand-over), all-boards view, org name, full backup |
+| キャンバス | 無限ボード、パン（スクロール、Space+ドラッグ、ハンドツール）、ズーム（Ctrl+スクロール、ピンチ、ボタン）、全体表示、ドットグリッド |
+| 付箋 | 11色、自動/固定文字サイズ、太字、作成者ラベル、比率維持リサイズ |
+| テキスト | サイズ・色・太字・揃えを持つテキストボックス、内容に合わせて伸びる |
+| 図形 | 四角・角丸・楕円・ひし形・三角。塗り・枠線・ラベル |
+| フレーム | 付箋をまとめるタイトル付き領域。フレームを動かすと中身も動く |
+| 線 | 直線、矢印（片側/両側）、破線、3種類の太さ、フリーハンドのペン |
+| 編集 | 複数選択、範囲選択、リサイズハンドル、ロック、重なり順、複製、コピー/貼り付け、微調整、元に戻す/やり直す、右クリックメニュー |
+| リアルタイム | WebSocket による全変更の同期、名前付きライブカーソル、他人の選択範囲表示、在席アバター、権限変更の即時反映 |
+| 共有 | プライベート/チーム公開、役割付き招待、共有リンク（閲覧/編集、ゲスト可否、有効期限）、所有権譲渡、ボードから退出 |
+| ボード | 検索・スター付き・招待の受信箱のあるダッシュボード、複製、名前変更、JSON エクスポート/インポート、PNG エクスポート |
+| 履歴 | 作業中 10 分ごとの自動バージョン（最新 40 件保持）＋ 手動保存。任意のバージョンをダウンロード/復元。復元は全員にリアルタイム反映 |
+| バックアップ | 管理者用の全ボード JSON バックアップ、`scripts/backup_sqlite.py` によるファイルコピー、マネージドホスティング向け PostgreSQL 対応 |
+| 管理 | メンバー一覧（役割・状態・パスワード再設定・ボード移管付き削除）、全ボード一覧、組織名、招待コードの状態表示、フルバックアップ |
 
-## Run it
+## 起動方法
 
-Requirements: Python 3.11+ (no Node needed). `uv` is used if present, otherwise plain `venv`.
-If the project folder is synced by iCloud Drive (macOS Desktop often is), keep the virtualenv outside
-it with `VENV_DIR=~/.venvs/whiteboard ./run.sh`; a synced venv makes Python imports stall.
+必要なもの: Python 3.11 以上（Node は不要）。`uv` があれば使い、なければ標準の `venv` を使います。
+プロジェクトフォルダが iCloud Drive で同期されている場合（macOS のデスクトップは同期されがちです）、
+仮想環境はフォルダの外に作ってください: `VENV_DIR=~/.venvs/whiteboard ./run.sh`。同期対象の venv は
+Python の import が固まる原因になります。
 
 ```bash
 ./run.sh            # http://localhost:8000
-./run.sh 9000       # custom port
+./run.sh 9000       # ポート指定
 ```
 
-Everyone sees the same sign-in card: colleagues click **Register a new account** and choose their
-own ID and password. On a brand-new, empty database the very first account is made administrator
-silently (there is no separate first-run setup screen). Admins can also add members directly under
-*Admin → Members*, and can promote anyone to admin there.
+サインイン画面は全員共通です。同僚は **「新しいアカウントを登録」** から自分で ID とパスワードを決めて
+アカウントを作成します。空のデータベースで最初に作られたアカウントだけが、画面上の案内なしに自動で
+管理者になります（専用の初期設定画面はありません）。管理者は *管理 → メンバー* から直接メンバーを追加
+したり、誰かを管理者に昇格させることもできます。
 
-Data lives in a single SQLite file at `data/boards.db` (override with `BOARD_DB=/path/to.db`).
-To use PostgreSQL instead (Neon, Supabase, Railway, RDS…) set `DATABASE_URL=postgres://…`; the
-schema is created automatically. Guest sessions and version history are stored in the same database,
-so nothing is lost on restart.
+インターネットに公開する場合は招待コードを設定してください。環境変数 `REGISTRATION_CODE` に文字列を
+入れると（ローカルではプロジェクト直下の `.env` ファイル）、登録画面に「招待コード」欄が現れ、
+その文字列と一致する人だけがアカウントを作れます。未設定なら誰でも登録できます。日本語のコードも使えます。
+値はブラウザに送られません。変更後はサーバーの再起動が必要です。現在の設定状況は *管理 → 設定* で
+確認できます（画面からは変更できません）。
 
-### Backups
+## 設定ファイル（.env）
 
-- Admin → Settings → **Full backup** downloads every board, member list and item as one JSON file.
-- `.venv/bin/python scripts/backup_sqlite.py backups 14` makes a consistent copy of the SQLite file
-  (safe while running) and keeps the last 14. Put it in cron.
-- Per-board versions: board menu → **Version history**. Any version can be downloaded as JSON and
-  re-imported from the dashboard.
+プロジェクト直下の `.env` は起動時に自動で読み込まれます（`./run.sh`、`python -m uvicorn …`、
+スクリプトのいずれでも）。追加のパッケージは不要です。
 
-### Hosting
+```
+DATABASE_URL=postgres://user:password@ep-xxx.ap-southeast-1.aws.neon.tech/whiteboard?sslmode=require
+REGISTRATION_CODE=社内コード2026
+```
 
-The app needs one long-running process (WebSockets), so serverless hosts such as Vercel are not a
-fit. Ready-made configs: `Dockerfile`, `fly.toml` (Fly.io with a persistent volume, a few dollars a
-month) and `render.yaml` (Render free tier + external Postgres). See `consult.txt` for a step-by-step
-comparison and the operations checklist.
+- **実際の環境変数が常に優先**されます。`DATABASE_URL=… ./run.sh` や Render / Fly.io のダッシュボードで
+  設定した値は `.env` より強いので、本番ホストではそちらを使ってください。
+- `.env` は `.gitignore` 済みで、Docker イメージにも入りません。
+- `WB_SKIP_ENV_FILE=1` を付けると読み込みを完全にスキップします（テストランナーがこれを使います）。
+- 起動時にどのキーを読み込んだか、どのデータベースに繋いだかがログに出ます（値は出ません）。
 
-Environment variables: `PORT`, `BOARD_DB`, `DATABASE_URL`, `COOKIE_SECURE=1` (force Secure cookies),
-`AUTO_SNAPSHOT_MINUTES` (default 10), `MAX_AUTO_SNAPSHOTS` (default 40).
+データは `data/boards.db` の SQLite ファイル 1 つに保存されます（`BOARD_DB=/path/to.db` で変更可）。
+`.env` か環境変数に `DATABASE_URL=postgres://…` があれば、**自動的に** PostgreSQL
+（Neon、Supabase、Railway、RDS など）に切り替わります。スキーマは自動作成され、`sslmode` が無ければ
+`require` が付加されます。ゲストセッションとバージョン履歴も同じデータベースに保存されるため、
+再起動で失われるものはありません。
 
-### Deploying on the office network
+### バックアップ
 
-Run behind any reverse proxy that forwards WebSockets (nginx, Caddy). Use HTTPS in production so
-session cookies are not sent in the clear. Example Caddyfile:
+- 管理 → 設定 → **フルバックアップ** で、すべてのボード・メンバー・アイテムを 1 つの JSON にダウンロード。
+- `.venv/bin/python scripts/backup_sqlite.py backups 14` は稼働中でも安全に SQLite ファイルをコピーし、
+  最新 14 件を保持します。cron に登録してください。
+- ボード単位のバージョン: ボードメニュー → **バージョン履歴**。どのバージョンも JSON でダウンロードでき、
+  ダッシュボードから再インポートできます。
+
+### ホスティング
+
+WebSocket を使うため常駐プロセスが 1 つ必要で、Vercel のようなサーバーレスには向きません。
+`Dockerfile`、`fly.toml`（Fly.io + 永続ボリューム、月数ドル）、`render.yaml`（Render 無料枠 + 外部
+Postgres）を用意しています。手順の比較と運用チェックリストは `consult.txt` を参照してください。
+
+環境変数: `PORT`、`BOARD_DB`、`DATABASE_URL`、`REGISTRATION_CODE`（登録に必要な招待コード。未設定なら
+誰でも登録可）、`COOKIE_SECURE=1`（Secure Cookie を強制）、`ALLOWED_ORIGINS`（WebSocket を許可する
+オリジンをカンマ区切りで指定。未設定ならリクエストと同じホストのみ）、`AUTO_SNAPSHOT_MINUTES`（既定 10）、
+`MAX_AUTO_SNAPSHOTS`（既定 40）、`WB_SKIP_ENV_FILE=1`（設定ファイルを読み込まない）。
+
+### 社内ネットワークでの公開
+
+WebSocket を転送できるリバースプロキシ（nginx、Caddy）の背後で動かしてください。セッション Cookie を
+平文で送らないよう、本番では HTTPS を使います。Caddyfile の例:
 
 ```
 board.example.local {
@@ -80,49 +104,74 @@ board.example.local {
 }
 ```
 
-## Project layout
+## 構成
 
 ```
-server/main.py   FastAPI app: REST API, WebSocket hub, static SPA
-server/auth.py   scrypt password hashing, sessions, guest sessions
-server/db.py     Schema + SQLite/PostgreSQL adapter
+server/main.py   FastAPI アプリ: REST API、WebSocket ハブ、静的 SPA
+server/auth.py   scrypt パスワードハッシュ、セッション、ゲストセッション
+server/db.py     スキーマ + SQLite/PostgreSQL アダプタ
+server/envfile.py  起動時の設定ファイル読み込み
 scripts/         backup_sqlite.py
-Dockerfile, fly.toml, render.yaml   deployment
-static/app.js    SPA shell: auth, dashboard, share dialog, admin panel
-static/board.js  Canvas editor (tools, selection, undo, realtime)
+Dockerfile, fly.toml, render.yaml   デプロイ設定
+static/app.js    SPA シェル: 認証、ダッシュボード、共有ダイアログ、管理画面
+static/board.js  キャンバスエディタ（ツール、選択、Undo、リアルタイム）
 static/style.css
-tests/e2e.py     Playwright browser test (3 users collaborating)
+tests/e2e.py     Playwright ブラウザテスト（3 ユーザーで共同作業）
+tests/registration_code.py  招待コードの検証（別プロセスで実行）
 ```
 
-## Access model
+## アクセスモデル
 
-| Role | Can |
+| 役割 | できること |
 | --- | --- |
-| Owner | Everything on the board, incl. sharing, members, links, delete, transfer |
-| Editor | Add/edit/delete items, rename, invite others |
-| Viewer | Look around, follow cursors, export |
-| Guest (via link) | View or edit per the link's permission; no account; loses access when the link is revoked |
-| Admin | Full access to all boards and member management |
+| オーナー | ボードのすべて（共有設定、メンバー、リンク、削除、譲渡を含む） |
+| 編集者 | アイテムの追加/編集/削除、名前変更、他者の招待 |
+| 閲覧者 | 閲覧、カーソルの追従、エクスポート |
+| ゲスト（リンク経由） | リンクの権限に応じて閲覧または編集。アカウント不要。リンクが無効化されるとアクセス権を失う |
+| 管理者 | 全ボードへのフルアクセスとメンバー管理 |
 
-Board visibility: **Private** (owner + invited members) or **Team** (every signed-in member,
-with a board-wide view/edit default; individual invitations override it).
+ボードの公開範囲: **プライベート**（オーナー + 招待メンバー）または **チーム**（サインイン済みの全員。
+ボード全体の閲覧/編集の既定値を持ち、個別の招待はそれを上書きする）。
 
-## Tests
+## セキュリティ
+
+- パスワードは scrypt でハッシュ化。8 文字以上を必須。
+- セッションは 256 bit のランダムトークンを HttpOnly / SameSite=Lax の Cookie に保存（HTTPS 配下では Secure）。
+- ログイン試行は IP 単位（5 分に 15 回）とユーザー ID 単位（5 分に 10 回）で制限。登録とゲスト作成にも上限あり。
+- 招待コードは環境変数のみで設定し、比較は `hmac.compare_digest`（タイミング攻撃対策）。管理 API からは変更できません。
+- WebSocket は Origin ヘッダーを検証し、他サイトからの接続を拒否。
+- すべての応答に CSP（自サイトのスクリプトのみ）、`X-Frame-Options: DENY`、`nosniff`、HTTPS 時は HSTS を付与。
+- メールアドレスを持たないため、セルフサービスのパスワードリセットはありません。管理者がメンバー一覧から再設定します。
+  ロックアウトを避けるため管理者は 2 人以上にしてください。
+- 共有リンクは URL を知っている人なら誰でも開けます。機密性の高いボードでは「サインイン必須」のリンクを使い、
+  有効期限を設定し、終わったら無効化してください。
+
+## テスト
 
 ```bash
-uv pip install --python .venv/bin/python playwright   # once; uses your installed Google Chrome
+uv pip install --python .venv/bin/python playwright   # 初回のみ。インストール済みの Google Chrome を使います
 ./tests/run_e2e.sh
 ```
 
-If your editor reports `Failed to run python -m pip list`, the virtualenv was created without pip.
-Add it with `uv pip install --python .venv/bin/python pip`. It does not affect the tests.
+テストランナーは `.env` を**読み込みません**（`WB_SKIP_ENV_FILE=1`）。本番の PostgreSQL に接続して
+ユーザーやボードを作ったり消したりしないための安全策です。実際の PostgreSQL に対して試したい場合は、
+本番ではなく Neon の**ブランチ**を作り、URL を明示的に渡してください:
 
-The suite registers an admin, builds a board with every item type, invites a second user, checks
-view-only enforcement and the live upgrade to editor, verifies realtime sync / cursors / presence,
-opens the board as a link guest, revokes the link, checks team boards, and exercises the admin panel.
+```bash
+DATABASE_URL="postgres://…branch…?sslmode=require" ./tests/run_e2e.sh
+```
 
-## Keyboard shortcuts
+エディタが `Failed to run python -m pip list` と表示する場合、仮想環境に pip が入っていません。
+`uv pip install --python .venv/bin/python pip` で追加できます（テストには影響しません）。
 
-`V` select · `H` pan · `N` sticky · `T` text · `S` shape · `F` frame · `L` line · `A` arrow · `P` pen ·
-double-click canvas for a new sticky · `Enter` edit · `Del` delete · `Ctrl+Z / Shift+Ctrl+Z` undo/redo ·
-`Ctrl+C/V/D` copy/paste/duplicate · `[` / `]` z-order · arrows nudge · `Ctrl+0` reset zoom · `Shift+1` fit.
+テストは、管理者を登録し、全種類のアイテムでボードを作り、2 人目を招待し、閲覧のみの強制と編集者への
+即時昇格を確認し、リアルタイム同期/カーソル/在席を検証し、リンク経由のゲストとしてボードを開き、
+リンクを無効化し、チームボードを確認し、管理画面を操作します。第 2 フェーズ（`tests/registration_code.py`）は
+`REGISTRATION_CODE` を設定した別プロセスを立ち上げ、コード無し/誤り/正しい場合の挙動と、コードが
+ブラウザに漏れないことを確認します。
+
+## キーボードショートカット
+
+`V` 選択 · `H` パン · `N` 付箋 · `T` テキスト · `S` 図形 · `F` フレーム · `L` 線 · `A` 矢印 · `P` ペン ·
+キャンバスをダブルクリックで新しい付箋 · `Enter` 編集 · `Del` 削除 · `Ctrl+Z / Shift+Ctrl+Z` 元に戻す/やり直す ·
+`Ctrl+C/V/D` コピー/貼り付け/複製 · `[` / `]` 重なり順 · 矢印キーで微調整 · `Ctrl+0` ズームをリセット · `Shift+1` 全体を表示

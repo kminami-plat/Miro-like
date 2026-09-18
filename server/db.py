@@ -148,7 +148,11 @@ def _pg_pool():
     if _pool is None:
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
-        _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=True)
+        url = DATABASE_URL if "sslmode=" in DATABASE_URL else DATABASE_URL + ("&" if "?" in DATABASE_URL else "?") + "sslmode=require"
+        # Managed Postgres (Neon etc.) suspends idle computes and drops connections; check each connection
+        # before handing it out and retire idle ones so the pool never serves a dead socket.
+        _pool = ConnectionPool(url, min_size=1, max_size=8, max_idle=300, check=ConnectionPool.check_connection,
+                               kwargs={"row_factory": dict_row}, open=True)
     return _pool
 
 

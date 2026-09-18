@@ -81,21 +81,21 @@
     // top bar
     const top = h('div', { class: 'board-top' });
     const leftPanel = h('div', { class: 'panel' });
-    const backBtn = h('button', { class: 'btn ghost icon', title: 'Back to boards' }, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>');
+    const backBtn = h('button', { class: 'btn ghost icon', title: 'ボード一覧へ戻る' }, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>');
     backBtn.onclick = () => opts.onBack && opts.onBack();
     const nameEl = h('div', { class: 'board-name', contenteditable: canEdit() ? 'true' : 'false', spellcheck: 'false' });
     nameEl.textContent = state.board.name;
     nameEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } if (e.key === 'Escape') { nameEl.textContent = state.board.name; nameEl.blur(); } };
     nameEl.onblur = () => { const n = nameEl.textContent.trim(); if (n && n !== state.board.name) opts.onRename && opts.onRename(n); else nameEl.textContent = state.board.name; };
-    const statusDot = h('span', { class: 'status-dot', title: 'Connecting…' });
+    const statusDot = h('span', { class: 'status-dot', title: '接続中…' });
     leftPanel.append(backBtn, nameEl, statusDot);
-    const menuBtn = h('button', { class: 'btn ghost icon', title: 'Board menu' }, '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>');
+    const menuBtn = h('button', { class: 'btn ghost icon', title: 'ボードメニュー' }, '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>');
     menuBtn.onclick = (e) => { e.stopPropagation(); showBoardMenu(menuBtn); };
     leftPanel.append(menuBtn);
     const spacer = h('div', { class: 'grow', style: 'pointer-events:none' });
     const rightPanel = h('div', { class: 'panel' });
     const presenceEl = h('div', { class: 'presence' });
-    const shareBtn = h('button', { class: 'btn primary sm' }, 'Share');
+    const shareBtn = h('button', { class: 'btn primary sm' }, '共有');
     shareBtn.onclick = () => opts.onShare && opts.onShare();
     rightPanel.append(presenceEl, shareBtn);
     top.append(leftPanel, spacer, rightPanel);
@@ -103,9 +103,9 @@
     // toolbar
     const toolbar = h('div', { class: 'panel toolbar' });
     const TOOLS = [
-      ['select', 'Select', 'V'], ['hand', 'Pan', 'H'], null,
-      ['sticky', 'Sticky note', 'N'], ['text', 'Text', 'T'], ['shape', 'Shape', 'S'], ['frame', 'Frame', 'F'], null,
-      ['line', 'Line', 'L'], ['arrow', 'Arrow', 'A'], ['pen', 'Pen', 'P'],
+      ['select', '選択', 'V'], ['hand', 'パン', 'H'], null,
+      ['sticky', '付箋', 'N'], ['text', 'テキスト', 'T'], ['shape', '図形', 'S'], ['frame', 'フレーム', 'F'], null,
+      ['line', '線', 'L'], ['arrow', '矢印', 'A'], ['pen', 'ペン', 'P'],
     ];
     const toolBtns = {};
     for (const t of TOOLS) {
@@ -116,17 +116,17 @@
       toolbar.append(b);
     }
     const zoombar = h('div', { class: 'panel zoombar' });
-    const zoomOut = h('button', { title: 'Zoom out (−)' }, '−');
-    const zoomLabel = h('button', { title: 'Reset zoom (Ctrl+0)' }, '100%');
-    const zoomIn = h('button', { title: 'Zoom in (+)' }, '+');
-    const fitBtn = h('button', { title: 'Fit to content (Shift+1)' }, '⤢');
+    const zoomOut = h('button', { title: '縮小 (−)' }, '−');
+    const zoomLabel = h('button', { title: 'ズームをリセット (Ctrl+0)' }, '100%');
+    const zoomIn = h('button', { title: '拡大 (+)' }, '+');
+    const fitBtn = h('button', { title: '全体を表示 (Shift+1)' }, '⤢');
     zoomOut.onclick = () => zoomBy(1 / 1.25);
     zoomIn.onclick = () => zoomBy(1.25);
     zoomLabel.onclick = () => setView({ s: 1 });
     fitBtn.onclick = fitToContent;
     zoombar.append(zoomOut, zoomLabel, zoomIn, fitBtn);
     const hint = h('div', { class: 'hint hidden' });
-    const viewOnly = h('div', { class: 'viewonly hidden' }, 'View only — ask the board owner for edit access');
+    const viewOnly = h('div', { class: 'viewonly hidden' }, '閲覧のみ — 編集するにはボードのオーナーに権限を依頼してください');
     const propbar = h('div', { class: 'panel propbar hidden' });
     root.append(top, toolbar, zoombar, hint, viewOnly, propbar);
     container.append(root);
@@ -207,7 +207,7 @@
     function buildHtmlItem(el, it) {
       el.className = 'item ' + it.type;
       if (it.type === 'sticky' || it.type === 'text') {
-        el.append(h('div', { class: 'txt', 'data-ph': it.type === 'sticky' ? 'Type here' : 'Text' }));
+        el.append(h('div', { class: 'txt', 'data-ph': it.type === 'sticky' ? 'ここに入力' : 'テキスト' }));
         if (it.type === 'sticky') el.append(h('div', { class: 'author' }));
       } else if (it.type === 'shape') {
         const s = svgEl('svg', { class: 'shape-bg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' });
@@ -316,7 +316,7 @@
       for (const g of gs) svgLayer.appendChild(g);
     }
     function removeItemEl(id) { const el = state.els.get(id); if (el) el.remove(); state.els.delete(id); defs.querySelector('#arrow-' + id)?.remove(); defs.querySelector('#arrows-' + id)?.remove(); }
-    function nameOf(id) { if (!id) return ''; if (state.names.has(id)) return state.names.get(id); const p = state.presence.find((u) => u.id === id); if (p) { state.names.set(id, p.display_name); return p.display_name; } return String(id).startsWith('guest_') ? 'Guest' : ''; }
+    function nameOf(id) { if (!id) return ''; if (state.names.has(id)) return state.names.get(id); const p = state.presence.find((u) => u.id === id); if (p) { state.names.set(id, p.display_name); return p.display_name; } return String(id).startsWith('guest_') ? 'ゲスト' : ''; }
 
     function renderAll() {
       for (const el of state.els.values()) el.remove();
@@ -385,7 +385,7 @@
     function makeSticky(x, y) { const it = newBase('sticky', x - 100, y - 100, 200, 200); it.props = { text: '', color: state.lastStickyColor }; return it; }
     function makeText(x, y) { const it = newBase('text', x, y - 16, 240, 40); it.props = { text: '', fontSize: 20, color: state.lastInk }; return it; }
     function makeShape(x, y, w, h) { const it = newBase('shape', x, y, w, h); it.props = { kind: state.shapeKind, fill: '#ffffff', stroke: INK_COLORS[0], text: '' }; return it; }
-    function makeFrame(x, y, w, h) { const it = newBase('frame', x, y, w, h); it.props = { title: 'Frame ' + (1 + [...state.items.values()].filter((i) => i.type === 'frame').length), fill: FRAME_FILLS[0] }; return it; }
+    function makeFrame(x, y, w, h) { const it = newBase('frame', x, y, w, h); it.props = { title: 'フレーム ' + (1 + [...state.items.values()].filter((i) => i.type === 'frame').length), fill: FRAME_FILLS[0] }; return it; }
     function makeLine(p1, p2, arrow) {
       const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
       const it = newBase('line', x, y, Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y));
@@ -484,7 +484,7 @@
       for (const u of state.presence) { if (!seen.has(u.id)) seen.set(u.id, { ...u, n: 0 }); seen.get(u.id).n++; }
       const list = [...seen.values()];
       list.slice(0, 8).forEach((u) => {
-        const a = h('div', { class: 'avatar', style: `background:${u.color}`, title: `${u.display_name}${u.guest ? ' (guest)' : ''} · ${u.perm === 'view' ? 'viewer' : u.perm}${u.conn === state.myConn ? ' (you)' : ''}` }, esc(initials(u.display_name)));
+        const a = h('div', { class: 'avatar', style: `background:${u.color}`, title: `${u.display_name}${u.guest ? '（ゲスト）' : ''} · ${{ view: '閲覧者', edit: '編集者', owner: 'オーナー' }[u.perm] || u.perm}${u.conn === state.myConn ? '（自分）' : ''}` }, esc(initials(u.display_name)));
         if (u.conn !== state.myConn) { a.style.cursor = 'pointer'; a.onclick = () => { const c = state.cursors.get(u.conn); if (c && c.cursor) setView({ x: canvas.clientWidth / 2 - c.cursor.x * state.view.s, y: canvas.clientHeight / 2 - c.cursor.y * state.view.s }); }; }
         presenceEl.append(a);
       });
@@ -506,16 +506,16 @@
       const pb = (html, onclick, title, active) => { const b = h('button', { class: 'pb' + (active ? ' active' : ''), title: title || '' }, html); b.onclick = onclick; return b; };
       const sep = () => h('div', { class: 'sep' });
       if (allLocked) {
-        propbar.append(pb(ICONS.unlock, () => updateItems(ids, (it) => { delete it.props.locked; }, { allowLocked: true }), 'Unlock'));
+        propbar.append(pb(ICONS.unlock, () => updateItems(ids, (it) => { delete it.props.locked; }, { allowLocked: true }), 'ロック解除'));
         positionPropbar(); return;
       }
       const first = items[0];
       if (only('sticky')) {
         for (const c of STICKY_COLORS) propbar.append(sw(c, first.props.color === c, () => { state.lastStickyColor = c; updateItems(ids, (it) => { it.props.color = c; }); }));
         propbar.append(sep());
-        const sizes = [['A', 0, 'Auto size'], ['S', 14, 'Small'], ['M', 20, 'Medium'], ['L', 28, 'Large']];
+        const sizes = [['A', 0, '自動サイズ'], ['S', 14, '小'], ['M', 20, '中'], ['L', 28, '大']];
         for (const [l, v, t] of sizes) propbar.append(pb(l, () => updateItems(ids, (it) => { it.props.fontSize = v; }), t, (first.props.fontSize || 0) === v));
-        propbar.append(pb(ICONS.bold, () => updateItems(ids, (it) => { it.props.bold = !first.props.bold; }), 'Bold', first.props.bold));
+        propbar.append(pb(ICONS.bold, () => updateItems(ids, (it) => { it.props.bold = !first.props.bold; }), '太字', first.props.bold));
         propbar.append(sep());
       } else if (only('text')) {
         for (const c of INK_COLORS) propbar.append(sw(c, first.props.color === c, () => { state.lastInk = c; updateItems(ids, (it) => { it.props.color = c; }); }));
@@ -523,15 +523,15 @@
         const sel = h('select'); for (const v of [12, 14, 16, 20, 24, 32, 40, 56, 72, 96]) sel.append(h('option', { value: v }, v + 'px'));
         sel.value = first.props.fontSize || 20;
         sel.onchange = () => updateItems(ids, (it) => { it.props.fontSize = +sel.value; });
-        propbar.append(sel, pb(ICONS.bold, () => updateItems(ids, (it) => { it.props.bold = !first.props.bold; }), 'Bold', first.props.bold));
-        for (const [al, ch] of [['left', '≡'], ['center', '☰'], ['right', '≡']]) propbar.append(pb(ch, () => updateItems(ids, (it) => { it.props.align = al; }), 'Align ' + al, (first.props.align || 'left') === al));
+        propbar.append(sel, pb(ICONS.bold, () => updateItems(ids, (it) => { it.props.bold = !first.props.bold; }), '太字', first.props.bold));
+        for (const [al, ch, lb] of [['left', '≡', '左揃え'], ['center', '☰', '中央揃え'], ['right', '≡', '右揃え']]) propbar.append(pb(ch, () => updateItems(ids, (it) => { it.props.align = al; }), lb, (first.props.align || 'left') === al));
         propbar.append(sep());
       } else if (only('shape')) {
-        for (const [k, l] of [['rect', '▭'], ['round', '▢'], ['ellipse', '◯'], ['diamond', '◇'], ['triangle', '△']]) propbar.append(pb(l, () => { state.shapeKind = k; updateItems(ids, (it) => { it.props.kind = k; }); }, k, (first.props.kind || 'rect') === k));
+        for (const [k, l, lb] of [['rect', '▭', '四角'], ['round', '▢', '角丸四角'], ['ellipse', '◯', '楕円'], ['diamond', '◇', 'ひし形'], ['triangle', '△', '三角']]) propbar.append(pb(l, () => { state.shapeKind = k; updateItems(ids, (it) => { it.props.kind = k; }); }, lb, (first.props.kind || 'rect') === k));
         propbar.append(sep());
-        for (const c of SHAPE_FILLS) propbar.append(sw(c, first.props.fill === c, () => updateItems(ids, (it) => { it.props.fill = c; }), 'Fill'));
+        for (const c of SHAPE_FILLS) propbar.append(sw(c, first.props.fill === c, () => updateItems(ids, (it) => { it.props.fill = c; }), '塗り'));
         propbar.append(sep());
-        for (const c of INK_COLORS.slice(0, 6)) propbar.append(sw(c, first.props.stroke === c, () => updateItems(ids, (it) => { it.props.stroke = c; it.props.color = c; }), 'Border'));
+        for (const c of INK_COLORS.slice(0, 6)) propbar.append(sw(c, first.props.stroke === c, () => updateItems(ids, (it) => { it.props.stroke = c; it.props.color = c; }), '枠線'));
         propbar.append(sep());
       } else if (only('frame')) {
         for (const c of FRAME_FILLS) propbar.append(sw(c.replace(/,[.\d]+\)$/, ',.7)'), first.props.fill === c, () => updateItems(ids, (it) => { it.props.fill = c; })));
@@ -539,19 +539,19 @@
       } else if (types.size && [...types].every((t) => t === 'line' || t === 'draw')) {
         for (const c of INK_COLORS) propbar.append(sw(c, first.props.stroke === c, () => { state.lastInk = c; updateItems(ids, (it) => { it.props.stroke = c; }); }));
         propbar.append(sep());
-        for (const [l, v] of [['thin', 2], ['med', 4], ['thick', 8]]) propbar.append(pb(`<span style="display:inline-block;width:18px;height:${v}px;background:currentColor;border-radius:2px;vertical-align:middle"></span>`, () => updateItems(ids, (it) => { it.props.width = v; }), l, (first.props.width || 3) === v));
-        propbar.append(pb('- -', () => updateItems(ids, (it) => { it.props.dashed = !first.props.dashed; }), 'Dashed', first.props.dashed));
+        for (const [l, v] of [['細', 2], ['中', 4], ['太', 8]]) propbar.append(pb(`<span style="display:inline-block;width:18px;height:${v}px;background:currentColor;border-radius:2px;vertical-align:middle"></span>`, () => updateItems(ids, (it) => { it.props.width = v; }), l, (first.props.width || 3) === v));
+        propbar.append(pb('- -', () => updateItems(ids, (it) => { it.props.dashed = !first.props.dashed; }), '破線', first.props.dashed));
         if (only('line')) {
-          propbar.append(pb('→', () => updateItems(ids, (it) => { it.props.arrow = !first.props.arrow; }), 'Arrow head', first.props.arrow));
-          propbar.append(pb('↔', () => updateItems(ids, (it) => { it.props.arrow = true; it.props.arrowStart = !first.props.arrowStart; }), 'Both ends', first.props.arrowStart));
+          propbar.append(pb('→', () => updateItems(ids, (it) => { it.props.arrow = !first.props.arrow; }), '矢じり', first.props.arrow));
+          propbar.append(pb('↔', () => updateItems(ids, (it) => { it.props.arrow = true; it.props.arrowStart = !first.props.arrowStart; }), '両端に矢じり', first.props.arrowStart));
         }
         propbar.append(sep());
       }
-      propbar.append(pb(ICONS.dup, () => duplicateSelection(), 'Duplicate (Ctrl+D)'));
-      propbar.append(pb(ICONS.front, () => { const z = maxZ(); updateItems(ids, (it, b) => { it.z = z + 1 + ids.indexOf(it.id); }); }, 'Bring to front (])'));
-      propbar.append(pb(ICONS.back, () => { const z = minZ(); updateItems(ids, (it) => { it.z = z - 1 - ids.indexOf(it.id); }); }, 'Send to back ([)'));
-      propbar.append(pb(ICONS.lock, () => updateItems(ids, (it) => { it.props.locked = true; }), 'Lock'));
-      propbar.append(pb(ICONS.trash, () => deleteItems(ids), 'Delete (Del)'));
+      propbar.append(pb(ICONS.dup, () => duplicateSelection(), '複製 (Ctrl+D)'));
+      propbar.append(pb(ICONS.front, () => { const z = maxZ(); updateItems(ids, (it, b) => { it.z = z + 1 + ids.indexOf(it.id); }); }, '最前面へ (])'));
+      propbar.append(pb(ICONS.back, () => { const z = minZ(); updateItems(ids, (it) => { it.z = z - 1 - ids.indexOf(it.id); }); }, '最背面へ ([)'));
+      propbar.append(pb(ICONS.lock, () => updateItems(ids, (it) => { it.props.locked = true; }), 'ロック'));
+      propbar.append(pb(ICONS.trash, () => deleteItems(ids), '削除 (Del)'));
       positionPropbar();
     }
     function positionPropbar() {
@@ -570,7 +570,7 @@
       state.tool = t;
       for (const k in toolBtns) toolBtns[k].classList.toggle('active', k === t);
       canvas.className = 'tool-' + t;
-      const hints = { sticky: 'Click to place a sticky note · Esc to cancel', text: 'Click to add text', shape: 'Drag to draw a shape (click for default size)', frame: 'Drag to draw a frame — items inside move with it', line: 'Drag to draw a line', arrow: 'Drag to draw an arrow', pen: 'Draw freehand', hand: 'Drag to pan · Scroll to move · Ctrl+scroll to zoom' };
+      const hints = { sticky: 'クリックで付箋を配置 · Escでキャンセル', text: 'クリックでテキストを追加', shape: 'ドラッグで図形を描く（クリックで標準サイズ）', frame: 'ドラッグでフレームを描く — 中のアイテムは一緒に動きます', line: 'ドラッグで線を描く', arrow: 'ドラッグで矢印を描く', pen: 'フリーハンドで描く', hand: 'ドラッグで移動 · スクロールで移動 · Ctrl+スクロールでズーム' };
       hint.textContent = hints[t] || ''; hint.classList.toggle('hidden', !hints[t]);
       if (t !== 'select') { state.selection.clear(); syncSelection(); }
     }
@@ -895,7 +895,7 @@
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKeyUp);
 
-    function copySelection() { const items = selectedItems(); if (!items.length) return; state.clipboard = items.map(snapshot); toast(`Copied ${items.length} item${items.length > 1 ? 's' : ''}`); }
+    function copySelection() { const items = selectedItems(); if (!items.length) return; state.clipboard = items.map(snapshot); toast(`${items.length}件をコピーしました`); }
     function pasteClipboard() {
       if (!state.clipboard || !state.clipboard.length || !canEdit()) return;
       const z = maxZ();
@@ -932,39 +932,39 @@
       const ids = [...state.selection]; if (!ids.length) return;
       const ed = canEdit();
       menu(x, y, [
-        { label: 'Copy', k: 'Ctrl+C', action: copySelection },
-        { label: 'Duplicate', k: 'Ctrl+D', action: duplicateSelection, disabled: !ed },
+        { label: 'コピー', k: 'Ctrl+C', action: copySelection },
+        { label: '複製', k: 'Ctrl+D', action: duplicateSelection, disabled: !ed },
         '-',
-        { label: 'Bring to front', k: ']', action: () => { const z = maxZ(); updateItems(ids, (it) => { it.z = z + 1; }); }, disabled: !ed },
-        { label: 'Send to back', k: '[', action: () => { const z = minZ(); updateItems(ids, (it) => { it.z = z - 1; }); }, disabled: !ed },
-        { label: selectedItems().every((i) => i.props.locked) ? 'Unlock' : 'Lock', action: () => { const lock = !selectedItems().every((i) => i.props.locked); updateItems(ids, (it) => { it.props.locked = lock; }, { allowLocked: true }); }, disabled: !ed },
+        { label: '最前面へ', k: ']', action: () => { const z = maxZ(); updateItems(ids, (it) => { it.z = z + 1; }); }, disabled: !ed },
+        { label: '最背面へ', k: '[', action: () => { const z = minZ(); updateItems(ids, (it) => { it.z = z - 1; }); }, disabled: !ed },
+        { label: selectedItems().every((i) => i.props.locked) ? 'ロック解除' : 'ロック', action: () => { const lock = !selectedItems().every((i) => i.props.locked); updateItems(ids, (it) => { it.props.locked = lock; }, { allowLocked: true }); }, disabled: !ed },
         '-',
-        { label: 'Delete', k: 'Del', action: () => deleteItems(ids), danger: true, disabled: !ed },
+        { label: '削除', k: 'Del', action: () => deleteItems(ids), danger: true, disabled: !ed },
       ]);
     }
     function showBoardMenu(anchor) {
       const r = anchor.getBoundingClientRect();
       menu(r.left, r.bottom + 6, [
-        { label: 'Fit to content', k: 'Shift+1', action: fitToContent },
-        { label: 'Select all', k: 'Ctrl+A', action: () => select([...state.items.keys()]) },
+        { label: '全体を表示', k: 'Shift+1', action: fitToContent },
+        { label: 'すべて選択', k: 'Ctrl+A', action: () => select([...state.items.keys()]) },
         '-',
-        { label: 'Save version now', action: () => opts.onSaveVersion && opts.onSaveVersion(), disabled: !canEdit() },
-        { label: 'Version history…', action: () => opts.onHistory && opts.onHistory() },
+        { label: '今の状態をバージョン保存', action: () => opts.onSaveVersion && opts.onSaveVersion(), disabled: !canEdit() },
+        { label: 'バージョン履歴…', action: () => opts.onHistory && opts.onHistory() },
         '-',
-        { label: 'Export as JSON', action: () => { window.location.href = `/api/boards/${state.boardId}/export`; } },
-        { label: 'Export as PNG', action: exportPng },
-        { label: 'Duplicate board', action: () => opts.onDuplicate && opts.onDuplicate(), disabled: state.me.guest },
+        { label: 'JSONでエクスポート', action: () => { window.location.href = `/api/boards/${state.boardId}/export`; } },
+        { label: 'PNGでエクスポート', action: exportPng },
+        { label: 'ボードを複製', action: () => opts.onDuplicate && opts.onDuplicate(), disabled: state.me.guest },
         '-',
-        { label: 'Keyboard shortcuts', action: () => opts.onShortcuts && opts.onShortcuts() },
+        { label: 'キーボードショートカット', action: () => opts.onShortcuts && opts.onShortcuts() },
         '-',
-        { label: 'Delete board', action: () => opts.onDelete && opts.onDelete(), danger: true, disabled: state.perm !== 'owner' },
+        { label: 'ボードを削除', action: () => opts.onDelete && opts.onDelete(), danger: true, disabled: state.perm !== 'owner' },
       ]);
     }
 
     // ------------------------------------------------------------ PNG export (simple rasterization)
     function exportPng() {
       const items = [...state.items.values()].sort((a, b) => (a.type === 'frame' ? -1e9 : a.z || 0) - (b.type === 'frame' ? -1e9 : b.z || 0));
-      const bb = itemsBBox(items); if (!bb) { toast('Nothing to export'); return; }
+      const bb = itemsBBox(items); if (!bb) { toast('エクスポートする内容がありません'); return; }
       const pad = 60, scale = Math.min(2, 8000 / Math.max(bb.w + pad * 2, bb.h + pad * 2));
       const c = document.createElement('canvas'); c.width = Math.ceil((bb.w + pad * 2) * scale); c.height = Math.ceil((bb.h + pad * 2) * scale);
       const ctx = c.getContext('2d'); ctx.scale(scale, scale); ctx.translate(pad - bb.x, pad - bb.y);
@@ -977,7 +977,7 @@
       };
       for (const it of items) {
         const p = it.props || {};
-        if (it.type === 'frame') { ctx.fillStyle = p.fill || 'rgba(255,255,255,.55)'; ctx.fillRect(it.x, it.y, it.w, it.h); ctx.strokeStyle = '#c7ccd9'; ctx.lineWidth = 2; ctx.strokeRect(it.x, it.y, it.w, it.h); ctx.font = '700 13px sans-serif'; ctx.fillStyle = '#5b6178'; ctx.textBaseline = 'bottom'; ctx.fillText(p.title || 'Frame', it.x, it.y - 6); }
+        if (it.type === 'frame') { ctx.fillStyle = p.fill || 'rgba(255,255,255,.55)'; ctx.fillRect(it.x, it.y, it.w, it.h); ctx.strokeStyle = '#c7ccd9'; ctx.lineWidth = 2; ctx.strokeRect(it.x, it.y, it.w, it.h); ctx.font = '700 13px sans-serif'; ctx.fillStyle = '#5b6178'; ctx.textBaseline = 'bottom'; ctx.fillText(p.title || 'フレーム', it.x, it.y - 6); }
         else if (it.type === 'sticky') { ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3; ctx.fillStyle = p.color || '#fff176'; ctx.fillRect(it.x, it.y, it.w, it.h); ctx.shadowColor = 'transparent'; const el = state.els.get(it.id)?.querySelector('.txt'); const fs = el ? parseFloat(el.style.fontSize) || 18 : 18; wrapText(p.text, it.x + 14, it.y + 14, it.w - 28, it.h - 28, fs, p.align || 'center', '#222', p.bold, true); }
         else if (it.type === 'text') wrapText(p.text, it.x + 8, it.y + 6, it.w - 16, it.h - 12, p.fontSize || 20, p.align || 'left', p.color || '#1c1f2b', p.bold, false);
         else if (it.type === 'shape') {
@@ -998,7 +998,7 @@
           if (it.type === 'line' && p.arrow) { const [a, b] = [pts[0], pts[1]]; const ang = Math.atan2(b[1] - a[1], b[0] - a[0]); const L = (p.width || 3) * 4; ctx.fillStyle = ctx.strokeStyle; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] - L * Math.cos(ang - 0.45), b[1] - L * Math.sin(ang - 0.45)); ctx.lineTo(b[0] - L * Math.cos(ang + 0.45), b[1] - L * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill(); }
         }
       }
-      const a = document.createElement('a'); a.download = (state.board.name || 'board').replace(/[^\w\-]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click();
+      const a = document.createElement('a'); a.download = (state.board.name || 'board').replace(/[\\/:*?"<>|\s]+/g, '_') + '.png'; a.href = c.toDataURL('image/png'); a.click();  // keep Japanese names; strip only unsafe filename characters
     }
 
     // ------------------------------------------------------------ websocket
@@ -1007,9 +1007,9 @@
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws/boards/${state.boardId}`);
       state.ws = ws;
-      ws.onopen = () => { state.connected = true; reconnectDelay = 800; statusDot.className = 'status-dot on'; statusDot.title = 'Connected — changes sync live'; pingTimer = setInterval(() => send({ t: 'ping' }), 25000); };
+      ws.onopen = () => { state.connected = true; reconnectDelay = 800; statusDot.className = 'status-dot on'; statusDot.title = '接続中 — 変更はリアルタイムで同期されます'; pingTimer = setInterval(() => send({ t: 'ping' }), 25000); };
       ws.onclose = (ev) => {
-        state.connected = false; clearInterval(pingTimer); statusDot.className = 'status-dot off'; statusDot.title = 'Disconnected — reconnecting…';
+        state.connected = false; clearInterval(pingTimer); statusDot.className = 'status-dot off'; statusDot.title = '切断されました — 再接続中…';
         if (closed) return;
         if (ev.code === 4403 || ev.code === 4404) { opts.onKicked && opts.onKicked(ev.code); return; }
         setTimeout(connect, reconnectDelay); reconnectDelay = Math.min(reconnectDelay * 1.6, 10000);
@@ -1034,7 +1034,7 @@
             state.items.clear(); for (const it of m.items) state.items.set(it.id, it);
             for (const id of [...state.selection]) if (!state.items.has(id)) state.selection.delete(id);
             renderAll(); state.undo = []; state.redo = []; renderPropbar();
-            if (m.reason === 'restore') toast(`${m.by?.display_name || 'Someone'} restored an earlier version`);
+            if (m.reason === 'restore') toast(`${m.by?.display_name || '誰か'} さんが以前のバージョンを復元しました`);
             break;
           }
           case 'presence': {
@@ -1051,7 +1051,7 @@
           case 'select': if (m.conn !== state.myConn) { if (m.ids.length) state.remoteSel.set(m.conn, { ids: m.ids, user: m.user }); else state.remoteSel.delete(m.conn); renderRemoteSelections(); } break;
           case 'board': state.board = m.board; nameEl.textContent = m.board.name; opts.onBoardUpdate && opts.onBoardUpdate(m.board); break;
           case 'members': state.members = m.members; for (const mm of m.members) state.names.set(mm.id, mm.display_name); opts.onMembers && opts.onMembers(m.members); break;
-          case 'perm': state.perm = m.permission; updatePermUI(); toast(state.perm === 'view' ? 'Your access changed to view only' : 'You can now edit this board'); break;
+          case 'perm': state.perm = m.permission; updatePermUI(); toast(state.perm === 'view' ? 'あなたの権限が閲覧のみに変わりました' : 'このボードを編集できるようになりました'); break;
           case 'kicked': closed = true; opts.onKicked && opts.onKicked(4403); break;
           case 'deleted': closed = true; opts.onDeleted && opts.onDeleted(); break;
           case 'error': toast(m.message, true); break;

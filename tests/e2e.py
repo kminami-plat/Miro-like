@@ -101,7 +101,7 @@ async def main():
         r = await ctxB.request.get(f"{BASE}/api/boards/{bid}"); assert r.status == 403, r.status
         print("B blocked from private board (403)")
         # A invites B as viewer via share modal
-        await A.click("button.btn.primary.sm:has-text('Share')")
+        await A.click("button.btn.primary.sm:has-text('共有')")
         await A.wait_for_selector("#inv-user"); await A.fill("#inv-user", "t.suzuki"); await A.select_option("#inv-role", "viewer"); await A.click("#inv")
         await A.wait_for_selector(".pill.amber")
         print("invite sent (pending)")
@@ -117,7 +117,7 @@ async def main():
         await B.keyboard.press("n"); await B.mouse.click(600, 400); await B.wait_for_timeout(300)
         assert await B.locator(".item.sticky").count() == 1, "viewer could create"
         # A upgrades B to editor -> B gets perm message live
-        await A.click("button.btn.primary.sm:has-text('Share')"); await A.wait_for_selector("select[data-role]")
+        await A.click("button.btn.primary.sm:has-text('共有')"); await A.wait_for_selector("select[data-role]")
         await A.select_option("select[data-role]", "editor"); await A.wait_for_timeout(500); await A.keyboard.press("Escape")
         await B.wait_for_selector(".viewonly.hidden", state="attached", timeout=5000)
         print("B upgraded to editor live")
@@ -185,11 +185,18 @@ async def main():
         await A.click("#adduser"); await A.fill("#u", "y.sato"); await A.fill("#d", "Yuki Sato"); await A.click("#ok")
         await A.wait_for_function("() => document.querySelectorAll('#users tr[data-id]').length === 3")
         await A.click(".tabs button[data-tab=settings]"); await A.wait_for_selector("#org")
-        # Self-registration is always open: anyone can create their own account.
+        # No REGISTRATION_CODE on this server, so self-registration is open (8+ char password).
+        # The gate itself is covered by tests/registration_code.py, which needs its own process.
         r = await ctxG.request.post(f"{BASE}/api/auth/register", data={"username": "zzz", "password": "abcd1234"}); assert r.status == 200, r.status
         r = await ctxG.request.get(f"{BASE}/api/auth/me"); assert (await r.json())["user"]["role"] == "member"
-        assert "#reg" not in await A.content() and "Allow anyone to create" not in await A.inner_text("#tab-settings")
-        print("Admin: add member OK, self-registration always open (no disable switch)")
+        r = await ctxG.request.post(f"{BASE}/api/auth/register", data={"username": "short", "password": "abc"}); assert r.status == 422, r.status
+        r = await ctxG.request.get(f"{BASE}/api/auth/me"); assert (await r.json())["settings"]["registration_code_required"] is False
+        # The invite code is configured by env var only: no input, no way to set it through the API.
+        assert await A.locator("#savecode").count() == 0
+        assert "未設定" in await A.inner_text("#regcode")
+        r = await ctxA.request.patch(f"{BASE}/api/admin/settings", data={"registration_code": "sneaky"}); assert r.status == 200
+        r = await ctxG.request.get(f"{BASE}/api/auth/me"); assert (await r.json())["settings"]["registration_code_required"] is False
+        print("Admin: add member OK, registration open, invite code not settable via API")
         await A.screenshot(path=f"{SHOT}/shot_admin.png")
         # export
         r = await ctxA.request.get(f"{BASE}/api/boards/{bid}/export"); ex = await r.json(); assert ex["format"] == "whiteboard/v1" and len(ex["items"]) >= 2

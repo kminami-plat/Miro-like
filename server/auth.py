@@ -103,14 +103,14 @@ def current_user(request: Request) -> dict[str, Any] | None:
 def require_user(request: Request) -> dict[str, Any]:
     u = current_user(request)
     if not u:
-        raise HTTPException(401, "Not signed in")
+        raise HTTPException(401, "サインインしていません")
     return u
 
 
 def require_admin(request: Request) -> dict[str, Any]:
     u = require_user(request)
     if u["role"] != "admin":
-        raise HTTPException(403, "Admin only")
+        raise HTTPException(403, "管理者のみ実行できます")
     return u
 
 
@@ -140,7 +140,7 @@ def create_guest(name: str) -> tuple[str, dict[str, Any]]:
     with db.conn() as c:
         c.execute(
             "INSERT INTO guests(token,id,display_name,color,boards,via,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)",
-            (token, "guest_" + token[:10], name[:40] or "Guest", pick_color(token), "{}", "{}", t, t + GUEST_TTL),
+            (token, "guest_" + token[:10], name[:40] or "ゲスト", pick_color(token), "{}", "{}", t, t + GUEST_TTL),
         )
         c.execute("DELETE FROM guests WHERE expires_at < ?", (t,))
     return token, get_guest(token)  # type: ignore[return-value]

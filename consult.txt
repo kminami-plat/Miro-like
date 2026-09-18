@@ -154,4 +154,105 @@ cookies to be marked Secure (all three hosted options give you HTTPS for free).
    - Board templates (retrospective, kanban, SWOT...). Cheap: export a board as JSON and
      import it — that already works as a template mechanism.
    - Rotation handles for items (data model already stores rotation).
-   - Japanese UI strings (currently English; all text lives in static/app.js and board.js).
+   - Japanese UI strings  [DONE 2026-09-18 — see section 7]
+
+================================================================================
+7. ADDITIONS — 2026-09-18 (Japanese UI, security hardening, Option B prep)
+================================================================================
+この回で実装したこと（お願いされた分）
+   [x] UI・エラーメッセージ・README・CLAUDE.md を日本語化（デザインは変更なし）
+   [x] 初回ログイン時の「管理者アカウント作成」画面を廃止（登録フローの混乱を解消）
+   [x] 招待コードを環境変数 REGISTRATION_CODE で設定（.env 可、日本語コード可、
+       比較は hmac.compare_digest、ブラウザには値を送らない）
+   [x] .env の自動読み込み（依存パッケージなし。実環境変数が優先。
+       → ./run.sh は .env の DATABASE_URL を自動で使うようになりました）
+   [x] パスワード最小 8 文字、ログイン制限を IP＋ユーザーID の二重に
+   [x] WebSocket の Origin 検証、CSP / HSTS / X-Frame-Options などのヘッダー
+   [x] Neon 対策: 接続プールの死活チェック、idle 5 分で破棄、sslmode=require 自動付与、
+       /api/health は既定で DB に触らない（無料枠の compute 時間を食わないため）
+   [x] テストランナーは .env を読まない（本番 DB を壊さないため）＋ 招待コード用の第2フェーズ追加
+
+
+7-1. 公開前に必ずやること（OPTION B の残り作業）
+--------------------------------------------------
+   [ ] Neon に「ブランチ」を1つ作り、そのURLでテストを1回通す。本番ブランチでは絶対にやらないこと
+       （テストはユーザーとボードを作って消します）:
+         DATABASE_URL="postgres://…branch…?sslmode=require" ./tests/run_e2e.sh
+       これが通れば PostgreSQL 経路は実機確認済みになります（まだ未確認の唯一の箇所）。
+   [ ] Render のダッシュボードで DATABASE_URL と REGISTRATION_CODE を環境変数として設定する。
+       .env は Docker イメージに入らないので、ホスト側で設定しないと反映されません。
+   [ ] 管理者を2人にする（パスワード再設定は管理者しかできず、メール機能が無いため）。
+   [ ] インスタンス数・ワーカー数は「1」から増やさないこと。リアルタイム配信(HUB)とレート制限が
+       プロセス内メモリなので、2 以上にすると別インスタンスの人と同期できなくなります。
+       増やしたい場合は Redis などの外部 pub/sub が必要（≒それなりの改修）。
+
+
+7-2. 費用と体感速度の話（正直なところ）
+--------------------------------------------------
+   Render 無料枠は 15 分アクセスが無いとスリープし、次の人が 30〜60 秒待たされます。さらに
+   スリープ時は WebSocket が全員切断されます（自動再接続しますが、会議中だと体感が悪い）。
+   無料で粘る方法は2つ:
+     (a) 外部から /api/health を 5〜10 分ごとに叩いて起こし続ける（UptimeRobot 無料など）。
+         Render 無料枠は月 750 インスタンス時間 = 24時間×31日 ≒ 744 時間なので、
+         常時起動でギリギリ収まります。ただし余裕はゼロです。
+     (b) 素直に Render Starter ($7/月) か Fly.io ($2〜4/月、東京リージョン nrt)。
+   30人規模で日常的に使うなら (b) を推奨します。特に Fly.io は同額以下でスリープ無し。
+
+   Neon 無料枠の注意: ストレージ 0.5 GB（このアプリなら十分）、compute 時間に上限あり、
+   一定時間で自動サスペンド。サスペンド復帰は1秒程度で、プール側の死活チェックを入れたので
+   「接続が死んでいた」系のエラーは出ないようにしてあります。
+
+
+7-3. バックアップの穴（重要）
+--------------------------------------------------
+   scripts/backup_sqlite.py は SQLite 専用です。PostgreSQL に移行すると、このスクリプトは
+   何もしません。Neon に移ったら:
+     - Neon 無料枠の復元ポイントは 24 時間しかありません。それより前には戻せません。
+     - なので「管理 → 設定 → フルバックアップ」の JSON を月1回は手元にダウンロードしてください。
+       ブラウザでログインして押すだけです。
+     - 自動化したい場合は pg_dump を使うスクリプトが必要です（未実装。ご希望なら作ります）。
+   復元テストを1回だけやっておくと安心です（バックアップJSONの中身を新規ボードにインポート）。
+
+
+7-4. 今後の提案（優先度順・すべて任意）
+--------------------------------------------------
+   A. エラー通知（おすすめ・無料）
+      Sentry の無料枠（月 5,000 イベント）を入れると、社員が踏んだ 500 エラーが通知されます。
+      今は誰かが「開けません」と言うまで気付けません。実装は 5 行程度。
+
+   B. 死活監視（おすすめ・無料）
+      UptimeRobot / Better Stack の無料枠で /api/health を監視。落ちたらメール。
+      7-2 (a) の「起こし続ける」効果も兼ねます。
+
+   C. Google / Microsoft アカウントでのログイン（SSO）
+      現在の「ID＋パスワード＋招待コード」で 30 人規模なら十分だと考えています。
+      それでも入れる価値があるのは、御社が Google Workspace か Microsoft 365 を使っている場合。
+      利点: パスワード管理と再設定が不要になり、「@plat-yonezawa.jp のみ許可」という制限がかけられる。
+      コスト: 無料。ただし Google Cloud / Entra でアプリ登録が必要で、作業は 1 日程度。
+      → 使いたい場合はお声がけください。今の招待コードは不要になります。
+
+   D. 画像・ファイルの貼り付け
+      オブジェクトストレージが必要。Cloudflare R2 の無料枠（10 GB）か、Neon のオブジェクト
+      ストレージが候補。ホワイトボードとしては需要が高い機能なので、要望が出たら検討を。
+
+   E. パスワードの強度表示 / 使い回し警告
+      今は 8 文字以上のみ。社内ツールとしては十分ですが、公開するなら「よくあるパスワード」の
+      拒否リストを足す手もあります（数十行）。
+
+   F. 付箋へのコメント・絵文字リアクション、ボードのテンプレート（振り返り・カンバン等）
+      テンプレートは「ボードをJSONで書き出して読み込む」で今でも代用可能です。
+
+   G. アイテムの回転ハンドル（データモデルには rotation が既にある）
+
+
+7-5. 運用上の細かい注意
+--------------------------------------------------
+   - 招待コードを変えたらサーバーの再起動が必要です（環境変数なので）。四半期ごとの変更を推奨。
+   - 退職者が出たら「管理 → メンバー → 無効化」。削除するとボードが管理者に移管されます。
+   - 共有リンクはURLを知っていれば誰でも開けます。ワークショップ後は無効化する運用に。
+   - 社外の人に見せるだけなら「ゲスト可・閲覧のみ・期限7日」のリンクが安全です。
+   - 5 番の「本番ではVPN/Tailscaleの内側に置く」案は、招待コードを設定したので必須ではなくなりました。
+     ただし最も安全なのは依然としてインターネットに出さない構成です（OPTION D）。
+
+PSQL
+Right: store the op log instead. Every edit already flows through apply_ops() as a small delta; appending those to a table gives you complete history at a fraction of the size, plus "who changed what, when." It's a real feature, not a config change — maybe half a day's work. Tell me if you want it and I'll scope it properly.
