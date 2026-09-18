@@ -68,22 +68,24 @@
 
   // ---------------------------------------------------------------- auth
   function renderAuth(next) {
-    const setup = S.settings.setup_needed;
-    let mode = setup ? 'register' : 'login';
+    // First-run admin setup screen disabled: it made the sign-up flow confusing for
+    // new colleagues. Everyone now sees the same sign-in / register card.
+    // const setup = S.settings.setup_needed;
+    let mode = 'login';
     const draw = () => {
       app.innerHTML = `<div class="auth-wrap"><div class="card auth-card">
         <div class="brand"><span class="logo"></span>${esc(S.settings.org_name || 'Whiteboard')}</div>
-        <p class="muted" style="margin:14px 0 20px">${setup ? 'Welcome! Create the first account — it becomes the administrator.' : mode === 'login' ? 'Sign in with your ID and password.' : 'Create your account.'}</p>
+        <p class="muted" style="margin:14px 0 20px">${mode === 'login' ? 'Sign in with your ID and password.' : 'Create your account.'}</p>
         <form id="f">
           <label class="field"><span>User ID</span><input name="username" autocomplete="username" required autofocus placeholder="e.g. k.minami"></label>
           ${mode === 'register' ? '<label class="field"><span>Display name</span><input name="display_name" placeholder="Shown to teammates"></label>' : ''}
           <label class="field"><span>Password</span><input name="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required minlength="4"></label>
-          <button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">${mode === 'login' ? 'Sign in' : setup ? 'Create admin account' : 'Create account'}</button>
+          <button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">${mode === 'login' ? 'Sign in' : 'Create account'}</button>
           <div class="err" id="err"></div>
         </form>
-        ${setup ? '' : `<div class="divider"></div>${mode === 'login'
+        <div class="divider"></div>${mode === 'login'
           ? '<button type="button" class="btn" id="sw" style="width:100%;justify-content:center">Register a new account</button>'
-          : '<div class="small muted" style="text-align:center">Already have an account? <a href="#" id="sw">Sign in</a></div>'}`}
+          : '<div class="small muted" style="text-align:center">Already have an account? <a href="#" id="sw">Sign in</a></div>'}
       </div></div>`;
       const sw = app.querySelector('#sw'); if (sw) sw.onclick = (e) => { e.preventDefault(); mode = mode === 'login' ? 'register' : 'login'; draw(); };
       app.querySelector('#f').onsubmit = async (e) => {

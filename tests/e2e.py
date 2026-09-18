@@ -12,12 +12,13 @@ def track(page, name):
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(channel="chrome", headless=True)
-        # ---- user A: admin setup
+        # ---- user A: first account (becomes admin silently; no special setup screen)
         ctxA = await browser.new_context(viewport={"width": 1400, "height": 900})
         A = await ctxA.new_page(); track(A, "A")
         await A.goto(BASE)
         await A.wait_for_selector("form#f")
-        assert "administrator" in await A.inner_text(".auth-card"), "setup text missing"
+        await A.click("#sw")  # switch to the register card
+        await A.wait_for_selector("input[name=display_name]")
         await A.fill("input[name=username]", "k.minami")
         await A.fill("input[name=display_name]", "Kaito Minami")
         await A.fill("input[name=password]", "secret123")

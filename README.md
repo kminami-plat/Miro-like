@@ -41,9 +41,10 @@ it with `VENV_DIR=~/.venvs/whiteboard ./run.sh`; a synced venv makes Python impo
 ./run.sh 9000       # custom port
 ```
 
-The **first account created becomes the administrator**. After that, colleagues click
-**Register a new account** on the sign-in page and choose their own ID and password. Admins can
-also add members directly under *Admin → Members*.
+Everyone sees the same sign-in card: colleagues click **Register a new account** and choose their
+own ID and password. On a brand-new, empty database the very first account is made administrator
+silently (there is no separate first-run setup screen). Admins can also add members directly under
+*Admin → Members*, and can promote anyone to admin there.
 
 Data lives in a single SQLite file at `data/boards.db` (override with `BOARD_DB=/path/to.db`).
 To use PostgreSQL instead (Neon, Supabase, Railway, RDS…) set `DATABASE_URL=postgres://…`; the

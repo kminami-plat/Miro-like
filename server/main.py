@@ -168,6 +168,8 @@ def register(body: RegisterIn, request: Request, response: Response):
     if not USERNAME_RE.match(body.username):
         raise HTTPException(400, "ID must be 2-32 chars: letters, numbers, . _ -")
     s = app_settings()
+    # The first-run "create the administrator" screen is disabled in the UI; this stays as a
+    # silent bootstrap so a brand-new, empty database still ends up with one admin.
     role = "admin" if s["setup_needed"] else "member"  # anyone may sign themselves up
     user_id = uid()
     with db.conn() as c:
