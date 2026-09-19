@@ -9,5 +9,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false        # paste your Postgres connection string in the Render dashboard
+      - key: REGISTRATION_CODE
+        sync: false        # invite code required to sign up. The local .env file is NOT deployed,
+                           # so set this in the Render dashboard or anyone on the internet can register.
       - key: COOKIE_SECURE
         value: "1"
