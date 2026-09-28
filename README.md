@@ -3,6 +3,9 @@
 社内チーム向けのセルフホスト型・Miro 風コラボレーションホワイトボードです。複数人が同じボードを開き、
 付箋・図形・手書き・カーソル・選択範囲をリアルタイムで共有できます。
 
+> **現在の既定の画面は「今日のボード」です**（サインイン → 今日のボード → アーカイブ）。以下の自由な
+> キャンバスのボード（一覧・作成・共有）は、環境変数 `LEGACY_BOARDS=1` のときだけ有効になります。
+
 Miro では有料プランになる機能が、そのまま使えます:
 
 - **ボード数無制限**（全メンバー）
@@ -28,6 +31,7 @@ Miro では有料プランになる機能が、そのまま使えます:
 | 履歴 | 作業中 10 分ごとの自動バージョン（最新 40 件保持）＋ 手動保存。任意のバージョンをダウンロード/復元。復元は全員にリアルタイム反映 |
 | バックアップ | 管理者用の全ボード JSON バックアップ、`scripts/backup_sqlite.py` によるファイルコピー、マネージドホスティング向け PostgreSQL 対応 |
 | 管理 | メンバー一覧（役割・状態・パスワード再設定・ボード移管付き削除）、全ボード一覧、組織名、招待コードの状態表示、フルバックアップ |
+| 今日のボード | **既定の画面**。社員 × ステータスの固定グリッドに付箋を貼るボード。付箋は社内タスクハブ（plat-todo）のタスクそのもので、双方向に反映。営業日の終わりに自動で記録し、1 か月分をアーカイブとして閲覧できる。設定と制限は [docs/plat-tasks/README.md](docs/plat-tasks/README.md) |
 
 ## 起動方法
 
@@ -56,11 +60,6 @@ Python の import が固まる原因になります。
 
 プロジェクト直下の `.env` は起動時に自動で読み込まれます（`./run.sh`、`python -m uvicorn …`、
 スクリプトのいずれでも）。追加のパッケージは不要です。
-
-```
-DATABASE_URL=postgres://user:password@ep-xxx.ap-southeast-1.aws.neon.tech/whiteboard?sslmode=require
-REGISTRATION_CODE=社内コード2026
-```
 
 - **実際の環境変数が常に優先**されます。`DATABASE_URL=… ./run.sh` や Render / Fly.io のダッシュボードで
   設定した値は `.env` より強いので、本番ホストではそちらを使ってください。
@@ -111,13 +110,19 @@ server/main.py   FastAPI アプリ: REST API、WebSocket ハブ、静的 SPA
 server/auth.py   scrypt パスワードハッシュ、セッション、ゲストセッション
 server/db.py     スキーマ + SQLite/PostgreSQL アダプタ
 server/envfile.py  起動時の設定ファイル読み込み
-scripts/         backup_sqlite.py
+server/plat_tasks.py  plat-todo タスクストア（plat-kv）の読み込み・マージ書き込み
+server/archive.py  営業日カレンダーと、1 日 1 回のボードの記録
+scripts/         backup_sqlite.py、seed_plat_sandbox.py
 Dockerfile, fly.toml, render.yaml   デプロイ設定
 static/app.js    SPA シェル: 認証、ダッシュボード、共有ダイアログ、管理画面
 static/board.js  キャンバスエディタ（ツール、選択、Undo、リアルタイム）
+static/plat_store.js  ボードのデータ層（送信キュー・再試行、アーカイブ用の読み取り専用ストア）
+static/tasks.js  ボードの画面（今日のボードとアーカイブで共通）
 static/style.css
 tests/e2e.py     Playwright ブラウザテスト（3 ユーザーで共同作業）
 tests/registration_code.py  招待コードの検証（別プロセスで実行）
+tests/plat_tasks_test.py, tests/archive_test.py  タスクストアと営業日・記録の単体テスト
+tests/tasks_grid.py, tests/fake_kv.py  今日のボードとアーカイブのブラウザテスト（Worker の代役に対して実行）
 ```
 
 ## アクセスモデル

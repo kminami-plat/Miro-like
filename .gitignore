@@ -8,3 +8,6 @@ backups/
 .venv_old/
 consult.txt
 .env
+todo.txt
+# local copies of the plat-todo roster / areas / projects (internal data)
+data/plat/

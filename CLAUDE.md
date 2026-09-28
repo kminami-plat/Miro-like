@@ -22,10 +22,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### テスト
 
-`tests/run_e2e.sh` は 2 フェーズを実行します。主スイートの `tests/e2e.py` は、3 つのブラウザコンテキスト
+`tests/run_e2e.sh` は 4 フェーズを実行します。まず単体テスト `tests/plat_tasks_test.py`（タスクストア）と
+`tests/archive_test.py`（営業日カレンダーと記録。unittest）。主スイートの `tests/e2e.py` は、3 つのブラウザコンテキスト
 （管理者・メンバー・リンク経由のゲスト）を 1 本の長い共同作業シナリオで動かす Playwright スクリプトです。
 第 2 フェーズの `tests/registration_code.py` は `REGISTRATION_CODE` を設定した別プロセスに対して招待コード
 ゲートを検証します（環境変数はプロセス起動時に固定されるため、主スイートでは切り替えられない）。
+最後の `tests/tasks_grid.py` は `tests/fake_kv.py`（plat-kv Worker の代役）と
+`tests/fixtures/plat/` の名簿を使って、既定モード（`LEGACY_BOARDS` なし）の今日のボードとアーカイブを検証します — **本物の Worker には決して向けないこと**。
 コードを変える場合はスクリプトと `run_e2e.sh` の両方を合わせてください。pytest ではないので個別のテストケースを
 選んで実行することはできません。粒度を変えたいときは `main()` の後半セクションをコメントアウトします。
 Google Chrome のインストールと venv 内の `playwright`（`uv pip install --python .venv/bin/python playwright`）
@@ -52,7 +55,7 @@ Google Chrome のインストールと venv 内の `playwright`（`uv pip instal
 
 ## アーキテクチャ
 
-サーバーは 3 モジュール、フロントエンドは 2 ファイル。クライアント側にフレームワークはなく、すべて手書きです。
+サーバーは `server/` の数モジュール、フロントエンドは `static/` の数ファイル。クライアント側にフレームワークはなく、すべて手書きです。
 
 **`server/db.py`** — スキーマと、2 つのバックエンドを 1 つのインターフェースに束ねる薄いアダプタ。
 既定は SQLite（`BOARD_DB`、WAL モード）、`DATABASE_URL` が設定されていれば PostgreSQL。SQL はすべて
@@ -116,6 +119,41 @@ Undo/Redo はクライアント単位でブラウザ内にしかありません�
 `onDeleted`、`onBoardUpdate`、`onMembers`）で上位と通信します。`static/app.js` はシェル: History API の
 ルーティング、認証カード、ダッシュボード、共有ダイアログ、管理画面を持ち、アプリ状態を `S` に保持し、
 ナビゲーション時にエディタをマウント/破棄します。後に読み込まれ、`BoardEditor` を呼ぶ唯一のファイルです。
+
+### 今日のボードとアーカイブ（既定の画面）
+
+既定ではアプリは **1 枚の固定グリッドのボード** です: サインイン → `/`（今日のボード）→ `/archive`
+（営業日カレンダー）→ `/archive/YYYY-MM-DD`（その日の凍結された閲覧専用ボード）。従来のダッシュボード・
+ボード作成・キャンバス（`board.js`、`/b/`、`/s/`）はコードを残したまま **`LEGACY_BOARDS=1` のときだけ**
+有効です（オフ時は `create_board` / `import_board` / `duplicate_board` が 403、`/b/` `/s/` は `/` へ）。
+e2e の第 1・2 フェーズはキャンバスを検証するので `LEGACY_BOARDS=1` で動かしています。
+
+`server/archive.py` が日本の営業日（土日・国民の祝日・振替休日・国民の休日・`ARCHIVE_EXTRA_HOLIDAYS`）を
+計算し、締め時刻（`ARCHIVE_CUTOFF`、既定 24:00 JST）を過ぎた直近の営業日を `board_archives` に 1 行だけ
+記録します（`ARCHIVE_DAYS`、既定 31 日で削除）。記録のきっかけは 3 つで、どれも冪等な `ensure_captured()`
+を呼ぶだけです: サーバー内の 1 分ごとのループ（`ARCHIVE_AUTO=0` で停止）、**このアプリからの書き込みの直前**
+（締め後の自分の編集が前日の記録に混ざらない）、外部 cron 用の `POST /api/archive/run`
+（`X-Archive-Secret: $ARCHIVE_CRON_SECRET`、または管理者）。記録は `board_snapshot()` の JSON（タスク・日程・
+行・参照リスト）で、画面は同じ `TaskGrid` を `PlatTaskStore.frozen()` で描き、期限切れはその日付で判定します。
+遅れて記録された場合は `late` が立ち、画面に明示されます。
+
+行（社員）は people.json に加えて、管理者が「行を編集」で設定する `settings.plat_roster`
+（ID・表示名・役職・非表示、並び順）で決まります（`board_meta()`）。非表示の行も付箋があるうちは表示します。
+
+### タスクグリッド（plat-todo 連携）
+
+ボードは社内タスクハブ（pm.plat-yonezawa.com/plat-todo/）と同じ Cloudflare Worker + KV（plat-kv）を
+読み書きする第 2 クライアントです。Worker を呼ぶのはサーバー（`server/plat_tasks.py`）なので CORS は
+関係せず、書き込みトークン `PLAT_KV_TOKEN` はブラウザに出ません。**PUT は値全体の置き換え**で既存ページも
+同時に書くため、書き込みは必ず `TaskStore.apply()` 経由の read-merge-write（最新を GET → ID 一致で
+変更フィールドだけ適用 → PUT）にします。`suggestions`・未知のキー・未知のタスクフィールドは必ず
+そのまま残すこと。キーは `PLAT_TASKS_KEY`（既定はサンドボックス `plat-todo-tasks-sandbox`）。
+ブラウザ側のキュー/デバウンス/再試行は `static/plat_store.js`、画面は `static/tasks.js`
+（`window.TaskGrid`、`app.js` が `S.editor` としてマウント）。付箋 1 枚 = タスク 1 件で、付箋の文字は
+`title`（1 行）です。空の付箋は保存しません。業務ルール（open/overdue/heavy、done_at）は
+Python と JS の両方にあるので、変えるときは両方を合わせます。people.json などは Cloudflare Access の
+内側にあり、サービストークンかローカルコピー（`data/plat/`）がなければタスクの担当者 ID から行を作ります。
+詳細は `docs/plat-tasks/`。
 
 HTML はすべてテンプレートリテラルで組み立てているので、**埋め込む値はすべて `esc()` を通します**。
 

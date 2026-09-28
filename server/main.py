@@ -9,6 +9,7 @@ import re
 import secrets
 import time
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -18,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import auth, db
+from . import archive, plat_tasks as plat
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,32}$")
@@ -26,6 +28,7 @@ app = FastAPI(title="Whiteboard", docs_url=None, redoc_url=None)
 
 AUTO_SNAPSHOT_INTERVAL = int(os.environ.get("AUTO_SNAPSHOT_MINUTES", "10")) * 60
 MAX_AUTO_SNAPSHOTS = int(os.environ.get("MAX_AUTO_SNAPSHOTS", "40"))
+BACKGROUND: set = set()  # long-running tasks started at startup (the archive loop)
 RATE_BUCKETS: dict[str, list[float]] = {}  # "kind:key" -> timestamps (basic brute-force / spam throttle)
 # Origins allowed to open WebSockets. Empty = same host as the request (the normal case).
 ALLOWED_ORIGINS = {o.strip().lower() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()}
@@ -39,6 +42,11 @@ def _startup() -> None:
         print(f"[whiteboard] .env loaded: {', '.join(sorted(ENV_FILE_KEYS))}")
     print(f"[whiteboard] database: {db.backend_name()}")
     print(f"[whiteboard] registration: {'招待コードが必要' if registration_code() else '誰でも登録可'}")
+    ps = plat_state()
+    print(f"[whiteboard] plat tasks: key={ps['key']}{' (本番)' if ps['production'] else ''}, {'書き込み可' if ps['writable'] else '閲覧のみ（PLAT_KV_TOKEN 未設定）'}")
+    print(f"[whiteboard] boards: {'従来のボード一覧・作成を有効化' if legacy_boards() else '今日のボードのみ（ボード作成は無効）'}")
+    if os.environ.get("ARCHIVE_AUTO", "1") != "0":
+        BACKGROUND.add(asyncio.get_running_loop().create_task(archive_loop()))  # keep a reference
 
 
 def is_https(request: Request) -> bool:
@@ -210,6 +218,20 @@ def board_summary(c, b: dict[str, Any], me: str | None = None) -> dict[str, Any]
 PASSWORD_MIN = 8
 
 
+def legacy_boards() -> bool:
+    """LEGACY_BOARDS=1 re-enables the old dashboard, board creation and the free canvas.
+
+    Off by default: the app is a single task board (today's board + daily archives). The code for
+    the canvas boards is kept so it can be switched back on; only creation is refused while off.
+    """
+    return os.environ.get("LEGACY_BOARDS", "") == "1"
+
+
+def require_legacy() -> None:
+    if not legacy_boards():
+        raise HTTPException(403, "新しいボードの作成は無効化されています")
+
+
 def registration_code() -> str:
     """The invite code required to self-register, from REGISTRATION_CODE (the .env file or the host's env).
 
@@ -239,6 +261,7 @@ def app_settings() -> dict[str, Any]:
         "org_name": db.get_setting("org_name", "チームホワイトボード"),
         # True when REGISTRATION_CODE is set; the code itself is never sent to the browser.
         "registration_code_required": bool(registration_code()),
+        "legacy_boards": legacy_boards(),
     }
 
 
@@ -477,6 +500,7 @@ def list_boards(user=Depends(auth.require_user)):
 
 @app.post("/api/boards")
 def create_board(body: BoardIn, user=Depends(auth.require_user)):
+    require_legacy()
     if body.visibility not in ("private", "team") or body.team_permission not in ("view", "edit"):
         raise HTTPException(400, "公開範囲の値が不正です")
     bid = uid()
@@ -533,6 +557,7 @@ async def delete_board(board_id: str, request: Request):
 
 @app.post("/api/boards/{board_id}/duplicate")
 def duplicate_board(board_id: str, request: Request):
+    require_legacy()
     board, perm, user, guest = require_board(request, board_id, "view")
     if not user:
         raise HTTPException(401, "複製するにはサインインしてください")
@@ -584,6 +609,7 @@ class ImportIn(BaseModel):
 
 @app.post("/api/boards/import")
 def import_board(body: ImportIn, user=Depends(auth.require_user)):
+    require_legacy()
     nid = uid()
     t = db.now()
     with db.conn() as c:
@@ -1113,6 +1139,151 @@ def admin_export(admin=Depends(auth.require_admin)):
     payload = {"format": "whiteboard/backup-v1", "exported_at": db.now(), "users": users, "boards": boards}
     fname = time.strftime("whiteboard-backup-%Y%m%d-%H%M.json")
     return JSONResponse(payload, headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+# ------------------------------------------------------------------ today's board (plat-todo tasks via plat-kv)
+
+class PlatBatchIn(BaseModel):
+    ops: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    today: str = ""  # the browser's local date, so done_at matches what the user sees
+
+
+class RosterRow(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(default="", max_length=60)
+    role: str = Field(default="", max_length=60)
+    hidden: bool = False
+
+
+class RosterIn(BaseModel):
+    rows: list[RosterRow] = Field(default_factory=list, max_length=300)
+
+
+def plat_state() -> dict[str, Any]:
+    cfg = plat.settings()
+    return {"key": cfg["key"], "production": cfg["key"] == plat.PRODUCTION_KEY, "writable": bool(cfg["token"])}
+
+
+def roster() -> list[dict[str, Any]]:
+    try:
+        rows = json.loads(db.get_setting("plat_roster", "[]"))
+    except ValueError:
+        return []
+    return [r for r in rows if isinstance(r, dict) and r.get("id")]
+
+
+def board_meta() -> dict[str, Any]:
+    """Rows and reference lists for the board. The in-app roster (admins) comes first, in its order,
+    and names people.json doesn't know; everyone else from people.json follows."""
+    ref = plat.normalized_reference()
+    known = {p["id"]: p for p in ref["people"]}
+    people = []
+    for r in roster():
+        p = known.pop(r["id"], None) or {"id": r["id"], "name": r["id"], "initials": "", "color": "", "role": ""}
+        people.append({**p, "name": r.get("name") or p["name"], "role": r.get("role") or p["role"], "hidden": bool(r.get("hidden"))})
+    people.extend({**p, "hidden": False} for p in ref["people"] if p["id"] in known)
+    return {**plat_state(), **ref, "people": people, "statuses": plat.STATUSES, "priorities": plat.PRIORITIES}
+
+
+def board_state() -> dict[str, Any]:
+    """The live board: plat-todo tasks plus read-only project schedule tasks. Raises plat.KvError."""
+    store = plat.get_store()
+    doc = store.load()
+    tasks = [t for t in doc["tasks"] if isinstance(t, dict) and t.get("id")]
+    project_ids = {t["projectId"] for t in tasks if t.get("projectId")}
+    project_ids.update(p["id"] for p in plat.normalized_reference()["projects"])
+    project_ids.update(plat.settings()["project_ids"])
+    return {"tasks": tasks, "project_tasks": plat.project_tasks(store.kv, sorted(project_ids))}
+
+
+def board_snapshot() -> dict[str, Any]:
+    """Everything needed to redraw the board later exactly as it was (suggestions are not part of the board)."""
+    meta = board_meta()
+    return {**board_state(), **{k: meta[k] for k in ("key", "people", "workspaces", "projects", "statuses", "priorities")}}
+
+
+def capture_due() -> Optional[str]:
+    try:
+        return archive.ensure_captured(board_snapshot)
+    except plat.KvError as e:
+        print(f"[archive] 記録できませんでした（再試行します）: {e}")
+        return None
+
+
+async def archive_loop() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(capture_due)
+        except Exception as e:  # never let the loop die
+            print(f"[archive] loop error: {e}")
+        await asyncio.sleep(60)
+
+
+@app.get("/api/plat/meta")
+def plat_meta(user=Depends(auth.require_user)):
+    return {**board_meta(), "roster": roster() if user["role"] == "admin" else None}
+
+
+@app.put("/api/plat/roster")
+def plat_roster(body: RosterIn, admin=Depends(auth.require_admin)):
+    seen: set[str] = set()
+    rows = []
+    for r in body.rows:
+        rid = r.id.strip()
+        if rid and rid not in seen:
+            seen.add(rid)
+            rows.append({"id": rid, "name": r.name.strip(), "role": r.role.strip(), "hidden": r.hidden})
+    db.set_setting("plat_roster", json.dumps(rows, ensure_ascii=False))
+    return {**board_meta(), "roster": rows}
+
+
+@app.get("/api/plat/tasks")
+async def plat_tasks_read(user=Depends(auth.require_user)):
+    try:
+        state = await asyncio.to_thread(board_state)
+    except plat.KvError as e:
+        raise HTTPException(502, str(e))
+    return {**plat_state(), **state}
+
+
+@app.post("/api/plat/tasks/batch")
+async def plat_tasks_batch(body: PlatBatchIn, user=Depends(auth.require_user)):
+    if not plat_state()["writable"]:
+        raise HTTPException(403, "書き込み用トークンが未設定のため、タスクは閲覧のみです")
+    throttle("plat-write", user["id"], 240)
+    # Freeze the previous business day first if its cutoff has passed, so this edit lands on the new day.
+    await asyncio.to_thread(capture_due)
+    store = plat.get_store()
+    try:
+        doc, results = await asyncio.to_thread(store.apply, body.ops, body.today)
+    except plat.KvError as e:
+        raise HTTPException(502, str(e))
+    return {"tasks": [t for t in doc["tasks"] if isinstance(t, dict) and t.get("id")], "results": results}
+
+
+@app.get("/api/archives")
+def archives_list(user=Depends(auth.require_user)):
+    return {"archives": archive.list_archives(), "keep_days": archive.keep_days()}
+
+
+@app.get("/api/archives/{day}")
+def archives_read(day: str, user=Depends(auth.require_user)):
+    a = archive.read_archive(day)
+    if not a:
+        raise HTTPException(404, "この日の記録はありません")
+    return {"archive": a}
+
+
+@app.post("/api/archive/run")
+async def archive_run(request: Request):
+    """For an external cron (the free Render plan sleeps through the cutoff): header X-Archive-Secret."""
+    secret = os.environ.get("ARCHIVE_CRON_SECRET", "")
+    given = request.headers.get("x-archive-secret", "")
+    user = auth.current_user(request)
+    if not ((secret and hmac.compare_digest(given.encode(), secret.encode())) or (user and user["role"] == "admin")):
+        raise HTTPException(401, "認証が必要です")
+    day = await asyncio.to_thread(capture_due)
+    return {"captured": day, "due": archive.due_day(datetime.now(plat.JST)).isoformat()}
 
 
 @app.websocket("/ws/boards/{board_id}")

@@ -14,3 +14,16 @@ services:
                            # so set this in the Render dashboard or anyone on the internet can register.
       - key: COOKIE_SECURE
         value: "1"
+      # タスクグリッド（plat-todo 連携）。docs/plat-tasks/README.md 参照
+      - key: PLAT_KV_TOKEN
+        sync: false        # plat-kv の書き込みトークン。未設定ならタスクは閲覧のみ
+      - key: PLAT_TASKS_KEY
+        sync: false        # 未設定 = plat-todo-tasks-sandbox。承認後に plat-todo-tasks
+      - key: PLAT_ACCESS_CLIENT_ID
+        sync: false        # Cloudflare Access のサービストークン（社員名簿などの取得用）
+      - key: PLAT_ACCESS_CLIENT_SECRET
+        sync: false
+      # 営業日ごとの記録。無料プランは寝ている間に締め時刻を過ぎるので、外部 cron から
+      # POST /api/archive/run（ヘッダー X-Archive-Secret）を呼ぶ。docs/plat-tasks/README.md 参照
+      - key: ARCHIVE_CRON_SECRET
+        sync: false

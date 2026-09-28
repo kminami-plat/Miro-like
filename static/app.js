@@ -48,7 +48,7 @@
   }
 
   // ---------------------------------------------------------------- state & routing
-  const S = { user: null, guest: null, settings: {}, editor: null };
+  const S = { user: null, guest: null, settings: {}, editor: null };  // editor: the mounted BoardEditor or TaskGrid
   function nav(path) { history.pushState(null, '', path); route(); }
   window.addEventListener('popstate', route);
   document.addEventListener('click', (e) => { const a = e.target.closest('a[data-nav]'); if (a) { e.preventDefault(); nav(a.getAttribute('href')); } });
@@ -58,12 +58,17 @@
   async function route() {
     if (S.editor) { S.editor.destroy(); S.editor = null; }
     const p = location.pathname;
+    const legacy = S.settings.legacy_boards;  // LEGACY_BOARDS=1: the old dashboard and canvas boards
     let m;
-    if ((m = p.match(/^\/s\/([\w-]+)$/))) return renderShareLanding(m[1]);
-    if ((m = p.match(/^\/b\/([\w-]+)$/))) return renderBoard(m[1]);
+    if (legacy && (m = p.match(/^\/s\/([\w-]+)$/))) return renderShareLanding(m[1]);
+    if (legacy && (m = p.match(/^\/b\/([\w-]+)$/))) return renderBoard(m[1]);
     if (!S.user) return renderAuth();
     if (p === '/admin') return S.user.role === 'admin' ? renderAdmin() : nav('/');
-    return renderDashboard();
+    if ((m = p.match(/^\/archive\/(\d{4}-\d{2}-\d{2})$/))) return renderArchiveDay(m[1]);
+    if (p === '/archive') return renderArchiveList();
+    if (p === '/today' || (p === '/' && !legacy)) return renderToday();
+    if (legacy && p === '/') return renderDashboard();
+    return nav('/');  // unknown paths, and /b/ /s/ links while the old boards are switched off
   }
 
   // ---------------------------------------------------------------- auth
@@ -102,11 +107,19 @@
     const u = S.user;
     return `<div class="topbar">
       <a href="/" data-nav class="brand" style="color:inherit"><span class="logo"></span>${esc(S.settings.org_name || 'ホワイトボード')}</a>
+      ${navLinks()}
       <div class="grow"></div>${extra}
       ${u.role === 'admin' ? `<a href="/admin" data-nav class="btn ghost sm">管理</a>` : ''}
       <button class="btn ghost sm" id="profile" title="プロフィール">${avatar(u)} <span>${esc(u.display_name)}</span></button>
       <button class="btn ghost sm" id="logout">サインアウト</button>
     </div>`;
+  }
+  function navLinks() {
+    const p = location.pathname, legacy = S.settings.legacy_boards;
+    const todayPath = legacy ? '/today' : '/';
+    const link = (href, label, on) => `<a href="${href}" data-nav class="btn ghost sm${on ? ' active' : ''}">${label}</a>`;
+    return link(todayPath, '今日のボード', p === todayPath) + link('/archive', 'アーカイブ', p.startsWith('/archive'))
+      + (legacy ? link('/', 'ボード一覧', p === '/') : '');
   }
   function wireTopbar() {
     app.querySelector('#logout').onclick = async () => { await api('POST', '/api/auth/logout'); S.user = null; S.guest = null; nav('/'); };
@@ -135,13 +148,14 @@
 
   // ---------------------------------------------------------------- dashboard
   async function renderDashboard() {
-    app.innerHTML = topbar() + `<div class="dash"><div class="row between" style="flex-wrap:wrap;gap:12px"><h1 style="font-size:22px">ボード</h1><div class="row"><input type="search" id="q" placeholder="ボードを検索…" style="width:220px"><button class="btn" id="import">JSONをインポート</button><button class="btn primary" id="new">+ 新しいボード</button></div></div><div id="lists"><p class="muted" style="margin-top:30px">読み込み中…</p></div></div>`;
+    app.innerHTML = topbar() + `<div class="dash"><div class="row between" style="flex-wrap:wrap;gap:12px"><h1 style="font-size:22px">ボード一覧</h1><div class="row"><input type="search" id="q" placeholder="ボードを検索…" style="width:220px"><button class="btn" id="import">JSONをインポート</button><button class="btn primary" id="new">+ 新しいボード</button></div></div><div id="lists"><p class="muted" style="margin-top:30px">読み込み中…</p></div></div>`;
     wireTopbar();
     app.querySelector('#new').onclick = newBoardModal;
     app.querySelector('#import').onclick = importBoard;
     let data;
     try { data = await api('GET', '/api/boards'); } catch (e) { toast(e.message, true); return; }
     const lists = app.querySelector('#lists');
+    if (!lists) return;  // navigated elsewhere (e.g. タスク) while the list was loading
     const draw = () => {
       const q = (app.querySelector('#q').value || '').toLowerCase();
       const f = (arr) => arr.filter((b) => !q || b.name.toLowerCase().includes(q) || (b.owner && b.owner.display_name.toLowerCase().includes(q)));
@@ -326,6 +340,66 @@
   function shortcutsModal() {
     const rows = [['V', '選択'], ['H', 'パン（Space長押し / 中ボタンでも可）'], ['N', '付箋'], ['T', 'テキスト'], ['S', '図形'], ['F', 'フレーム'], ['L / A', '線 / 矢印'], ['P', 'ペン'], ['キャンバスをダブルクリック', '新しい付箋'], ['アイテムをダブルクリック', 'テキストを編集'], ['Enter', '選択中のアイテムを編集'], ['Esc', '編集終了 / 選択解除'], ['Del', '削除'], ['Ctrl+Z / Shift+Ctrl+Z', '元に戻す / やり直す'], ['Ctrl+C / V / D', 'コピー / 貼り付け / 複製'], ['Ctrl+A', 'すべて選択'], ['[ / ]', '背面へ / 前面へ'], ['矢印キー', '微調整（Shiftで10px）'], ['スクロール', 'パン'], ['Ctrl+スクロール / ピンチ', 'ズーム'], ['Ctrl+0', 'ズームをリセット'], ['Shift+1', '全体を表示'], ['Shift+角をドラッグ', '自由なサイズ変更（付箋は比率維持）']];
     modal(`<h2>キーボードショートカット</h2><table class="tbl">${rows.map(([k, d]) => `<tr><td style="width:45%"><b>${esc(k)}</b></td><td>${esc(d)}</td></tr>`).join('')}</table><div class="actions"><button class="btn primary" data-close>閉じる</button></div>`);
+  }
+
+  // ---------------------------------------------------------------- today's board & archives
+  const WD = ['月', '火', '水', '木', '金', '土', '日'];
+  const dayLabel = (iso) => { const d = new Date(iso + 'T00:00:00'); return `${d.getMonth() + 1}月${d.getDate()}日（${WD[(d.getDay() + 6) % 7]}）`; };
+  const clock = (t) => new Date(t * 1000).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const gridOpts = () => ({ api, toast, esc, modal, confirmDialog, isAdmin: S.user.role === 'admin' });
+
+  function renderToday() {
+    app.innerHTML = topbar() + '<div id="board-root"></div>';
+    wireTopbar();
+    S.editor = window.TaskGrid(app.querySelector('#board-root'), {
+      ...gridOpts(), title: '今日のボード', subtitle: esc(dayLabel(isoOf(new Date()))) + ' · 営業日の終わりに自動で記録されます',
+    });
+  }
+
+  async function renderArchiveList() {
+    app.innerHTML = topbar() + '<div class="dash"><h1 style="font-size:22px">アーカイブ</h1><div id="arc"><p class="muted" style="margin-top:20px">読み込み中…</p></div></div>';
+    wireTopbar();
+    let d;
+    try { d = await api('GET', '/api/archives'); } catch (e) { toast(e.message, true); return; }
+    const box = app.querySelector('#arc'); if (!box) return;
+    const byDay = new Map(d.archives.map((a) => [a.day, a]));
+    // A Mon–Fri calendar of the retention window; weekdays missing from the list are holidays.
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const start = new Date(today); start.setDate(start.getDate() - d.keep_days); start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    let html = `<p class="small muted" style="margin:6px 0 16px">営業日ごとに、その日の終わりのボードを記録しています（${d.keep_days}日間保存）。日付を選ぶと、その時点のボードを閲覧できます。</p><div class="arc-cal"><div class="arc-h">月</div><div class="arc-h">火</div><div class="arc-h">水</div><div class="arc-h">木</div><div class="arc-h">金</div>`;
+    for (const day = new Date(start); day <= today; day.setDate(day.getDate() + 1)) {
+      const wd = (day.getDay() + 6) % 7; if (wd > 4) continue;
+      const iso = isoOf(day), a = byDay.get(iso), label = `${day.getMonth() + 1}/${day.getDate()}`;
+      const tooOld = (today - day) / 86400000 > d.keep_days;
+      if (!a) html += `<div class="arc-day off">${label}<span>${tooOld ? '' : '休日'}</span></div>`;
+      else if (a.state === 'captured') html += `<a class="arc-day ok" href="/archive/${iso}" data-nav data-day="${iso}">${label}<span>${a.task_count} 件</span><small>${a.late ? `<b class="late">遅れて記録</b> ` : ''}${esc(clock(a.captured_at))}</small></a>`;
+      else if (a.state === 'open') html += `<a class="arc-day open" href="${S.settings.legacy_boards ? '/today' : '/'}" data-nav>${label}<span>今日</span><small>${esc(clock(a.cutoff))} に記録</small></a>`;
+      else if (a.state === 'before') html += `<div class="arc-day off">${label}<span>記録開始前</span></div>`;
+      else html += `<div class="arc-day missing">${label}<span>記録なし</span><small>記録できませんでした</small></div>`;
+    }
+    box.innerHTML = html + '</div>';
+  }
+
+  async function renderArchiveDay(day) {
+    app.innerHTML = topbar() + '<div id="board-root"><p class="muted" style="padding:20px">読み込み中…</p></div>';
+    wireTopbar();
+    let a, list;
+    try { [{ archive: a }, { archives: list }] = await Promise.all([api('GET', `/api/archives/${day}`), api('GET', '/api/archives')]); }
+    catch (e) {
+      const r = app.querySelector('#board-root');
+      if (r) r.innerHTML = `<div class="dash"><div class="empty">${esc(e.message)}<div style="margin-top:12px"><a href="/archive" data-nav class="btn">アーカイブへ戻る</a></div></div></div>`;
+      return;
+    }
+    const root = app.querySelector('#board-root'); if (!root) return;
+    const captured = list.filter((x) => x.state === 'captured').map((x) => x.day).sort();
+    const i = captured.indexOf(day), prev = captured[i - 1], next = captured[i + 1];
+    const btn = (d, label) => (d ? `<a class="btn sm" href="/archive/${d}" data-nav>${label}</a>` : `<button class="btn sm" disabled>${label}</button>`);
+    S.editor = window.TaskGrid(root, {
+      ...gridOpts(), archive: a, title: `${dayLabel(day)}のボード`,
+      subtitle: `<span class="pill gray">記録・閲覧のみ</span> ${esc(clock(a.cutoff))} 時点${a.late ? ` <b class="late">（${esc(clock(a.captured_at))} に遅れて記録）</b>` : ''}`,
+      extraHtml: `${btn(prev, '‹ 前の営業日')}${btn(next, '次の営業日 ›')}<a class="btn sm" href="/archive" data-nav>カレンダー</a>`,
+    });
   }
 
   // ---------------------------------------------------------------- share landing

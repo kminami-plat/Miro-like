@@ -1,0 +1,5 @@
+[
+  { "id": "oda-kohei", "name": "小田", "initials": "小", "color": "#6D9678", "role": "副社長" },
+  { "id": "inoue-yohei", "name": "井上", "initials": "井", "color": "#5B7DB1", "role": "" },
+  { "id": "takahashi-kokoro", "name": "高橋", "initials": "高", "color": "#B1795B", "role": "" }
+]

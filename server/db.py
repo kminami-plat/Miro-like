@@ -104,6 +104,13 @@ CREATE TABLE IF NOT EXISTS board_snapshots (
   data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_board ON board_snapshots(board_id, created_at);
+CREATE TABLE IF NOT EXISTS board_archives (
+  day TEXT PRIMARY KEY,
+  captured_at DOUBLE PRECISION NOT NULL,
+  late INTEGER NOT NULL DEFAULT 0,
+  task_count INTEGER NOT NULL DEFAULT 0,
+  data TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS guests (
   token TEXT PRIMARY KEY,
   id TEXT NOT NULL,
