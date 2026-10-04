@@ -74,6 +74,7 @@ Cloudflare の plat-kv に、plat-todo と同じ型（`plat-todo-tasks`）で保
 | 変数 | 既定値 | 内容 |
 | --- | --- | --- |
 | `PLAT_KV_TOKEN` | なし | Worker の書き込みトークン（`X-Plat-Token`）。未設定ならボードは閲覧のみ |
+| `PLAT_LOCAL_ONLY` | なし | `1` でトークンなしでも編集可。変更は `data/plat/local_kv.json` にだけ保存され、Worker へは一切書き込まない（未編集のキーは Worker から読む） |
 | `PLAT_TASKS_KEY` | `plat-todo-tasks-sandbox` | 読み書きするキー。本番は `plat-todo-tasks` |
 | `ARCHIVE_CUTOFF` | `24:00` | 営業日を締める時刻（JST、`HH:MM`）。例: `18:00` |
 | `ARCHIVE_DAYS` | `31` | 記録を残す日数 |

@@ -179,6 +179,7 @@
         $('#tg-new').classList.toggle('hidden', !m.writable);
         $('#tg-rows').classList.toggle('hidden', !opts.isAdmin);
         const notes = [];
+        if (m.local_only) notes.push('ローカル編集モードです。変更はこのサーバーにだけ保存され、plat-todo には同期されません。');
         if (!m.writable) notes.push('サーバーに書き込み用トークン（PLAT_KV_TOKEN）が設定されていないため、閲覧のみです。');
         if (st.meta.sources.people === 'none' && !people().length) notes.push('社員名簿を読み込めないため、担当者IDを行名にしています。管理者は「行を編集」で名前を付けられます。');
         $('#tg-notice').innerHTML = notes.map((n) => `<div class="tg-note">${esc(n)}</div>`).join('');

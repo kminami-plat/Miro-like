@@ -43,7 +43,7 @@ def _startup() -> None:
     print(f"[whiteboard] database: {db.backend_name()}")
     print(f"[whiteboard] registration: {'招待コードが必要' if registration_code() else '誰でも登録可'}")
     ps = plat_state()
-    print(f"[whiteboard] plat tasks: key={ps['key']}{' (本番)' if ps['production'] else ''}, {'書き込み可' if ps['writable'] else '閲覧のみ（PLAT_KV_TOKEN 未設定）'}")
+    print(f"[whiteboard] plat tasks: key={ps['key']}{' (本番)' if ps['production'] else ''}, {'ローカル編集のみ（Worker へは同期しない）' if ps['local_only'] else '書き込み可' if ps['writable'] else '閲覧のみ（PLAT_KV_TOKEN 未設定）'}")
     print(f"[whiteboard] boards: {'従来のボード一覧・作成を有効化' if legacy_boards() else '今日のボードのみ（ボード作成は無効）'}")
     if os.environ.get("ARCHIVE_AUTO", "1") != "0":
         BACKGROUND.add(asyncio.get_running_loop().create_task(archive_loop()))  # keep a reference
@@ -1161,7 +1161,7 @@ class RosterIn(BaseModel):
 
 def plat_state() -> dict[str, Any]:
     cfg = plat.settings()
-    return {"key": cfg["key"], "production": cfg["key"] == plat.PRODUCTION_KEY, "writable": bool(cfg["token"])}
+    return {"key": cfg["key"], "production": cfg["key"] == plat.PRODUCTION_KEY, "writable": bool(cfg["token"]) or cfg["local_only"], "local_only": cfg["local_only"]}
 
 
 def roster() -> list[dict[str, Any]]:

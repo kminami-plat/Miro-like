@@ -12,6 +12,8 @@ server/main.py are thin wrappers around `TaskStore` and `reference_data()`.
 Configuration is read from the environment at call time (see `settings()`):
   PLAT_KV_URL          Worker base URL (default https://plat-kv.k-oda.workers.dev)
   PLAT_KV_TOKEN        write token, sent as X-Plat-Token. Unset = the grid is read-only.
+  PLAT_LOCAL_ONLY      1 = edit without a token: writes go to data/plat/local_kv.json and never reach
+                       the Worker (reads fall through to it until a key has been edited locally).
   PLAT_TASKS_KEY       storage key (default plat-todo-tasks-sandbox; production is plat-todo-tasks)
   PLAT_DATA_URL        where people/domains/projects JSON live (default https://pm.plat-yonezawa.com)
   PLAT_ACCESS_CLIENT_ID / PLAT_ACCESS_CLIENT_SECRET
@@ -94,6 +96,7 @@ def settings() -> dict[str, Any]:
     return {
         "kv_url": os.environ.get("PLAT_KV_URL", "https://plat-kv.k-oda.workers.dev").rstrip("/"),
         "token": os.environ.get("PLAT_KV_TOKEN", "").strip(),
+        "local_only": os.environ.get("PLAT_LOCAL_ONLY", "").strip().lower() in ("1", "true", "yes", "on"),
         "key": os.environ.get("PLAT_TASKS_KEY", SANDBOX_KEY).strip() or SANDBOX_KEY,
         "data_url": os.environ.get("PLAT_DATA_URL", "https://pm.plat-yonezawa.com").rstrip("/"),
         "access_id": os.environ.get("PLAT_ACCESS_CLIENT_ID", "").strip(),
@@ -148,6 +151,40 @@ class KvClient:
         if not self.token:
             raise KvError("書き込み用トークン（PLAT_KV_TOKEN）が設定されていません")
         return self._call("PUT", key, value)
+
+
+class LocalKv:
+    """Overlay store for PLAT_LOCAL_ONLY: put() writes a local JSON file, get() prefers it and
+    otherwise reads through to `remote`. Nothing is ever PUT to the Worker."""
+
+    def __init__(self, remote: Any, path: str):
+        self.remote = remote
+        self.path = path
+        self._lock = threading.Lock()
+
+    def _read(self) -> dict:
+        try:
+            with open(self.path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def get(self, key: str) -> Any:
+        with self._lock:
+            local = self._read()
+        return local[key] if key in local else self.remote.get(key)
+
+    def put(self, key: str, value: Any) -> dict:
+        with self._lock:
+            local = self._read()
+            local[key] = value
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(local, fh, ensure_ascii=False)
+            os.replace(tmp, self.path)
+        return {"ok": True}
 
 
 # ------------------------------------------------------------------ validation
@@ -443,7 +480,10 @@ _STORE: dict[tuple, TaskStore] = {}
 def get_store() -> TaskStore:
     """One TaskStore per (url, key, token) so the write lock is shared by every request."""
     cfg = settings()
-    k = (cfg["kv_url"], cfg["key"], cfg["token"])
+    k = (cfg["kv_url"], cfg["key"], cfg["token"], cfg["local_only"])
     if k not in _STORE:
-        _STORE[k] = TaskStore(KvClient(cfg["kv_url"], cfg["token"]), cfg["key"])
+        kv: Any = KvClient(cfg["kv_url"], cfg["token"])
+        if cfg["local_only"]:
+            kv = LocalKv(kv, os.path.join(cfg["local_dir"], "local_kv.json"))
+        _STORE[k] = TaskStore(kv, cfg["key"])
     return _STORE[k]
