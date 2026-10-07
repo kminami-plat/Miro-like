@@ -7,26 +7,28 @@ services:
     plan: free
     healthCheckPath: /api/health
     envVars:
-      - key: DATABASE_URL
-        sync: false        # paste your Postgres connection string in the Render dashboard
-      - key: REGISTRATION_CODE
-        sync: false        # invite code required to sign up. The local .env file is NOT deployed,
+      - fromGroup: Team_Dash_Env
+
+      # - key: DATABASE_URL
+        # sync: false        # paste your Postgres connection string in the Render dashboard
+      # - key: REGISTRATION_CODE
+        # sync: false        # invite code required to sign up. The local .env file is NOT deployed,
                            # so set this in the Render dashboard or anyone on the internet can register.
-      - key: COOKIE_SECURE
+      # - key: COOKIE_SECURE
         value: "1"
       # タスクグリッド（plat-todo 連携）。docs/plat-tasks/README.md 参照
-      - key: PLAT_KV_TOKEN
-        sync: false        # plat-kv の書き込みトークン。未設定ならタスクは閲覧のみ
-      - key: PLAT_LOCAL_ONLY
+      # - key: PLAT_KV_TOKEN
+        # sync: false        # plat-kv の書き込みトークン。未設定ならタスクは閲覧のみ
+      # - key: PLAT_LOCAL_ONLY
         value: "1"         # トークンなしで編集可。変更は data/plat/local_kv.json にだけ保存され plat-todo へは同期しない。
                            # 無料プランのディスクは永続化されないので、再デプロイ・再起動で編集内容は消える
-      - key: PLAT_TASKS_KEY
-        sync: false        # 未設定 = plat-todo-tasks-sandbox。承認後に plat-todo-tasks
-      - key: PLAT_ACCESS_CLIENT_ID
-        sync: false        # Cloudflare Access のサービストークン（社員名簿などの取得用）
-      - key: PLAT_ACCESS_CLIENT_SECRET
-        sync: false
+      # - key: PLAT_TASKS_KEY
+        # sync: false        # 未設定 = plat-todo-tasks-sandbox。承認後に plat-todo-tasks
+      # - key: PLAT_ACCESS_CLIENT_ID
+        # sync: false        # Cloudflare Access のサービストークン（社員名簿などの取得用）
+      # - key: PLAT_ACCESS_CLIENT_SECRET
+        # sync: false
       # 営業日ごとの記録。無料プランは寝ている間に締め時刻を過ぎるので、外部 cron から
       # POST /api/archive/run（ヘッダー X-Archive-Secret）を呼ぶ。docs/plat-tasks/README.md 参照
-      - key: ARCHIVE_CRON_SECRET
-        sync: false
+      # - key: ARCHIVE_CRON_SECRET
+        # sync: false
