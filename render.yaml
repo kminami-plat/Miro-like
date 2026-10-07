@@ -15,12 +15,12 @@ services:
         # sync: false        # invite code required to sign up. The local .env file is NOT deployed,
                            # so set this in the Render dashboard or anyone on the internet can register.
       # - key: COOKIE_SECURE
-        value: "1"
+        # value: "1"
       # タスクグリッド（plat-todo 連携）。docs/plat-tasks/README.md 参照
       # - key: PLAT_KV_TOKEN
         # sync: false        # plat-kv の書き込みトークン。未設定ならタスクは閲覧のみ
       # - key: PLAT_LOCAL_ONLY
-        value: "1"         # トークンなしで編集可。変更は data/plat/local_kv.json にだけ保存され plat-todo へは同期しない。
+        # value: "1"         # トークンなしで編集可。変更は data/plat/local_kv.json にだけ保存され plat-todo へは同期しない。
                            # 無料プランのディスクは永続化されないので、再デプロイ・再起動で編集内容は消える
       # - key: PLAT_TASKS_KEY
         # sync: false        # 未設定 = plat-todo-tasks-sandbox。承認後に plat-todo-tasks
