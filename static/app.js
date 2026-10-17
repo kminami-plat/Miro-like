@@ -106,7 +106,7 @@
   function topbar(extra = '') {
     const u = S.user;
     return `<div class="topbar">
-      <a href="/" data-nav class="brand" style="color:inherit"><span class="logo"></span>${esc(S.settings.org_name || 'ホワイトボード')}</a>
+      <a href="/" data-nav class="brand" style="color:inherit" aria-label="${esc(S.settings.org_name || 'ホワイトボード')}"><span class="logo"></span><span class="brand-name">${esc(S.settings.org_name || 'ホワイトボード')}</span></a>
       ${navLinks()}
       <div class="grow"></div>${extra}
       ${u.role === 'admin' ? `<a href="/admin" data-nav class="btn ghost sm">管理</a>` : ''}
