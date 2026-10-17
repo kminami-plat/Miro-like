@@ -1,23 +1,74 @@
 {
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "failIfUnavailable": true,
+    "excludedCommands": ["git push *", "gh pr *"],
+    "network": {
+      "allowedDomains": ["registry.npmjs.org"]
+    },
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws", "mode": "deny" },
+        { "path": "~/.config/gh", "mode": "deny" },
+        { "path": "~/.config/mini-harness", "mode": "deny" },
+        { "path": "~/.netrc", "mode": "deny" },
+        { "path": "~/.npmrc", "mode": "deny" },
+        { "path": "~/.docker/config.json", "mode": "deny" }
+      ],
+      "envVars": [
+        { "name": "ANTHROPIC_API_KEY", "mode": "deny" },
+        { "name": "OPENAI_API_KEY", "mode": "deny" },
+        { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "GH_TOKEN", "mode": "deny" },
+        { "name": "NPM_TOKEN", "mode": "deny" },
+        { "name": "AWS_SECRET_ACCESS_KEY", "mode": "deny" },
+        { "name": "AWS_SESSION_TOKEN", "mode": "deny" }
+      ]
+    }
+  },
   "permissions": {
+    "ask": [
+      "Bash(dangerouslyDisableSandbox:true)",
+      "Bash(git push *)",
+      "Bash(gh pr create *)"
+    ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./.envrc)",
-      "Edit(./.env)",
-      "Edit(./.env.*)",
-      "Edit(./.envrc)"
+      "Read(**/.env)",
+      "Bash(sudo *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(git checkout -- .*)",
+      "Bash(git restore .)",
+      "Bash(git stash clear*)",
+      "Bash(git branch -D*)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf $HOME*)"
     ]
   },
   "hooks": {
-    "PreToolUse": [
+    "PostToolUse": [
       {
-        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "P=$(cat); T=$(printf '%s' \"$P\" | jq -r '.tool_name // \"\"' 2>/dev/null); if [ \"$T\" = \"Bash\" ]; then S=$(printf '%s' \"$P\" | jq -r '.tool_input.command // \"\"' 2>/dev/null); else S=$(printf '%s' \"$P\" | jq -r '[.tool_input.file_path,.tool_input.path,.tool_input.notebook_path,.tool_input.pattern]|map(select(.!=null))|.[]' 2>/dev/null); fi; if printf '%s\\n' \"$S\" | grep -Eq '\\.env(rc)?([.-][A-Za-z0-9_-]+)*([^A-Za-z0-9_.-]|$)'; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"秘密情報保護のため .env / .env.* / .envrc へのアクセスはブロックされています。Bash 経由 (cat, head, sed, grep, less, source, cp など) も対象です。値が必要な場合は環境変数名で参照するか、プログラム側で .env を読み込ませてください。\"}}'; fi",
-            "statusMessage": ".env ガードを確認中"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/format.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify.sh",
+            "async": true
           }
         ]
       }
